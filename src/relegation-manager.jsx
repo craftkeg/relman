@@ -3,6 +3,20 @@ import { useState, useEffect, useMemo, useRef } from "react";
 // ── DATA ──────────────────────────────────────────────────
 const FN=["James","David","Michael","Chris","Daniel","Mark","Steve","Paul","Andrew","Tom","Ben","Sam","Jack","Ryan","Luke","Matt","Nathan","Scott","Gary","Lee","Wayne","Rio","Frank","John","Peter","Alan","Ian","Rob","Simon","Tony","Phil","Kevin","Nigel","Stuart","Craig","Darren","Jamie","Dean","Colin","Neil","Gareth","Owen","Aaron","Adam","Callum","Ethan","Liam","Noah","Oliver","Harry","George","Charlie","Leo","Alfie","Freddie","Oscar","Archie","Arthur","Henry","Jacob","Thomas","Joshua","William","Max","Theo","Finley","Sebastian","Elliot","Riley","Hugo","Louie","Toby","Reuben","Jude","Edward","Kai","Logan","Harvey","Harrison","Dylan","Elijah","Isaac","Tyler","Lucas","Jayden","Connor","Zack","Aiden","Blake","Kyle","Rhys","Caleb","Joel","Ellis","Evan","Rowan","Felix","Jesse","Troy","Miles","Rex","Finn","Cole","Noel","Ross","Kirk","Drew","Brent","Wade","Clay","Vince","Grant","Floyd","Lance","Clint","Hank","Chad","Seth","Kurt","Bart","Carl","Glen","Dale","Earl"];
 const LN=["Smith","Johnson","Williams","Brown","Jones","Miller","Davis","Wilson","Taylor","Anderson","Thomas","Jackson","White","Harris","Martin","Thompson","Garcia","Martinez","Robinson","Clark","Rodriguez","Lewis","Lee","Walker","Hall","Allen","Young","King","Wright","Scott","Green","Baker","Adams","Nelson","Hill","Campbell","Mitchell","Roberts","Carter","Phillips","Evans","Turner","Torres","Parker","Collins","Edwards","Stewart","Morris","Murphy","Cook","Rogers","Morgan","Peterson","Cooper","Reed","Bailey","Bell","Gomez","Kelly","Howard","Ward","Cox","Diaz","Richardson","Wood","Watson","Brooks","Bennett","Gray","James","Reyes","Cruz","Hughes","Price","Myers","Long","Foster","Sanders","Ross","Morales","Powell","Sullivan","Russell","Ortiz","Jenkins","Perry","Butler","Barnes","Fisher","Henderson","Coleman","Simmons","Patterson","Jordan","Reynolds","Hamilton","Graham","Gonzalez","Alexander","Wallace","Griffin","West","Cole","Hayes","Bryant","Herrera","Gibson","Ellis","Medina","Stevens","Murray","Ford","Marshall","Owens","Harrison","Fernandez","McDonald","Woods","Washington","Kennedy","Wells","Henry","Freeman","Webb","Tucker","Burns","Crawford","Olson","Simpson","Porter","Hunter","Gordon","Silva","Shaw","Mason","Dixon","Hunt","Holmes","Palmer","Wagner","Black","Robertson","Boyd","Rose","Stone","Fox","Warren","Mills","Meyer","Rice","Daniels","Ferguson","Nichols","Stephens","Soto","Ryan","Gardner","Payne","Grant","Dunn","Spencer","Hawkins","Arnold","Pierce","Hansen","Peters","Santos","Hart","Bradley","Knight","Elliott","Duncan","Armstrong","Hudson","Carroll","Lane","Riley","Andrews","Ray","Berry","Perkins","Hoffman","Matthews","Richards","Willis","Carpenter","Lawrence","George","Chapman","Watkins","Greene","Barton","Bolton","Neville","Keane","Giggs","Beckham","Rooney","Scholes","Shearer","Owen","Ferdinand","Gerrard","Lampard","Terry","Campbell","Seaman","Yorke","Solskjaer","Cantona","Bergkamp","Henry","Vieira","Pires","Keegan","Pearce","Platt","Waddle","Lineker","Gascoigne","Beardsley","Ince","Pallister","Irwin","Stam","Butt","Johnsen","Sheringham"];
+// Keys must match LEAGUES exactly (with emoji + full name)
+const LEAGUE_LOCALE={
+  "🏴󠁧󠁢󠁥󠁮󠁧󠁿 English Premier League":"en",
+  "🇮🇹 Italian Serie A":"it",
+  "🇪🇸 Spanish La Liga":"es",
+  "🇫🇷 French Ligue 1":"fr"
+};
+const NAMES={
+  en:{first:FN,last:LN},
+  it:{first:["Alessandro","Andrea","Marco","Giuseppe","Francesco","Luca","Matteo","Simone","Roberto","Fabio","Christian","Paolo","Gianluca","Lorenzo","Federico","Davide","Claudio","Nicola","Stefano","Filippo","Vincenzo","Salvatore","Giovanni","Carlo","Angelo","Bruno","Enrico","Giorgio","Leonardo","Luigi","Mario","Michele","Pietro","Antonio","Daniele","Massimo","Domenico"],last:["Rossi","Russo","Ferrari","Colombo","Bianchi","Romano","Ricci","Marino","Greco","Bruno","Galli","Conti","Costa","Giordano","Mancini","Rizzo","Lombardi","Moretti","Barbieri","Fontana","Santoro","Mariani","Ferrara","Gallo","Martino","Leone","Longo","Gentile","Martinelli","Vitale","Riva","Sorrentino","Neri","Benedetti","Rossetti","De Angelis","Esposito","Caruso","Testa","Ferraro"]},
+  es:{first:["Carlos","David","Sergio","Javier","Andres","Fernando","Juan","Pablo","Raul","Iker","Xavi","Gerard","Cesc","Pedro","Diego","Alvaro","Marcos","Saul","Koke","Thiago","Isco","Daniel","Adrian","Antonio","Francisco","Jose","Miguel","Manuel","Rafael","Sergi","Pau","Mikel","Inaki","Unai","Aritz"],last:["Garcia","Rodriguez","Martinez","Lopez","Gonzalez","Fernandez","Perez","Sanchez","Ramirez","Torres","Flores","Rivera","Gomez","Diaz","Reyes","Cruz","Morales","Ortiz","Ruiz","Hernandez","Jimenez","Vazquez","Ramos","Moreno","Munoz","Alvarez","Romero","Alonso","Gutierrez","Navarro","Serrano","Molina","Delgado","Castillo","Iglesias","Santos","Guerrero","Lozano"]},
+  fr:{first:["Jean","Pierre","Paul","Michel","Laurent","Nicolas","Olivier","Francois","Antoine","Hugo","Lucas","Thomas","Kylian","Blaise","Karim","Raphael","Presnel","Kingsley","Corentin","Nabil","Adrien","Steve","Dimitri","Anthony","Wissam","Florian","Ludovic","Moussa","Layvin","Benjamin","Kurt","Clement","Tanguy"],last:["Martin","Bernard","Dubois","Thomas","Robert","Richard","Petit","Durand","Leroy","Moreau","Simon","Laurent","Lefebvre","Michel","Garcia","David","Bertrand","Roux","Vincent","Fournier","Morel","Girard","Bonnet","Dupont","Lambert","Fontaine","Rousseau","Muller","Lefevre","Faure","Andre","Mercier","Blanc","Garnier","Robin","Perrin","Clement","Morin","Gauthier"]}
+};
+let currentNameLocale="en";
 const POS=["GK","DL","DC","DR","DM","ML","MC","MR","AM","ST"];
 const POS_L={GK:"Goalkeeper",DL:"Left Back",DC:"Centre Back",DR:"Right Back",DM:"Def. Mid",ML:"Left Mid",MC:"Centre Mid",MR:"Right Mid",AM:"Att. Mid",ST:"Striker"};
 const FORMS=[
@@ -78,6 +92,7 @@ const LEAGUES={
 const LEAGUE_KEYS=Object.keys(LEAGUES);
 let TEAM_DATA=LEAGUES[LEAGUE_KEYS[0]];
 let TEAMS=TEAM_DATA.map(t=>t.nm);
+currentNameLocale=LEAGUE_LOCALE[LEAGUE_KEYS[0]]||"en";
 const TACS=["Ultra Def","Defensive","Balanced","Attacking","Ultra Att"];
 const TRAIN_OPTS=["Fitness","Defending","Attacking","Set Pieces"];
 const CMT={
@@ -111,7 +126,8 @@ function mkP(pos,q){
     at[a]=cl(v,1,99);
   });
   const ovr=Math.round(Object.values(at).reduce((s,v)=>s+v,0)/10);
-  return {id:uid(),nm:P(FN)+" "+P(LN),age,pos,at,ovr,wage:Math.round(ovr*ovr*2+R(100,2000)),val:Math.round((ovr*ovr*2+R(100,2000))*R(40,120)),mor:R(60,95),fit:R(70,100),frm:R(40,90),g:0,a:0,ap:0,yc:0,rc:0,inj:0,sus:0};
+  const loc=currentNameLocale||"en";const names=NAMES[loc]||NAMES.en;
+return {id:uid(),nm:P(names.first)+" "+P(names.last),age,pos,at,ovr,wage:Math.round(ovr*ovr*2+R(100,2000)),val:Math.round((ovr*ovr*2+R(100,2000))*R(40,120)),mor:R(60,95),fit:R(70,100),frm:R(40,90),g:0,a:0,ap:0,yc:0,rc:0,inj:0,sus:0};
 }
 function mkSq(q){
   const s=[];
@@ -695,6 +711,7 @@ export default function RM(){
     if(!window.storage)return;
     (async()=>{try{const r=await window.storage.get("auto-save");if(r&&r.value){const s=JSON.parse(r.value);
       TEAM_DATA=LEAGUES[s.league];TEAMS=TEAM_DATA.map(t=>t.nm);
+      currentNameLocale=LEAGUE_LOCALE[s.league]||"en";
       setLeague(s.league);setTeams(s.teams);setFix(s.fix);setWk(s.wk);setNews(s.news||[]);setPIdx(s.pIdx);
       setTrainHist(s.trainHist||[]);setTraining(s.training||"Fitness");setStreak(s.streak||0);
       setTeamTalk(s.teamTalk||null);setMustWinCount(s.mustWinCount||0);
@@ -719,6 +736,7 @@ export default function RM(){
     const lk=leagueKey||league;
     TEAM_DATA=LEAGUES[lk];
     TEAMS=TEAM_DATA.map(t=>t.nm);
+    currentNameLocale=LEAGUE_LOCALE[lk]||"en";
     setLeague(lk);
     const pw=generatePreWorld();
     setPreWorld(pw);
@@ -969,8 +987,9 @@ export default function RM(){
     endNews.push({w:38,tx:`🏆 ${champions.nm} are champions with ${champions.pts} points!`});
     endNews.push({w:38,tx:`⬇ Relegated: ${relegated.join(", ")}`});
     endNews.push({w:38,fr:"Chairman",su:rel?"Relegation confirmed":"End of season",
-      bo:rel?`We've been relegated. The club finishes ${pos}${pos===1?"st":pos===2?"nd":pos===3?"rd":"th"} with ${myT.pts} points. The darkest day in the club's history.`
-        :`We're safe! The club finishes ${pos}${pos===1?"st":pos===2?"nd":pos===3?"rd":"th"} with ${myT.pts} points. What an incredible achievement. The board would like to offer you a new contract.`});
+      bo:rel
+        ?`We've been relegated. The club finishes ${pos}${pos===1?"st":pos===2?"nd":pos===3?"rd":"th"} with ${myT.pts} points. The darkest day in the club's recent history. Your temporary contract will not be renewed, but the board thanks you for your efforts in impossible circumstances.`
+        :`We're safe! The club finishes ${pos}${pos===1?"st":pos===2?"nd":pos===3?"rd":"th"} with ${myT.pts} points. Thank you for steadying the club during your temporary spell in charge — the board will now look for a long-term appointment.`});
     endNews.push({w:38,fr:"Your Record",su:`${mW}W ${mD}D ${mL}L`,
       bo:`In ${myGames.length} games in charge you won ${mW}, drew ${mD} and lost ${mL}. Goals scored: ${mGF}. Goals conceded: ${mGA}. Points gained: ${mW*3+mD}.`});
     if(pots)endNews.push({w:38,fr:"Award",su:"Club Player of the Season",
@@ -1115,6 +1134,7 @@ export default function RM(){
   if(scr==="pick"&&preWorld) {
     const {teams:pw,bottom6,sorted:pwSorted}=preWorld;
     const pickTeams=bottom6.map(idx=>({idx,t:pw[idx],pos:pwSorted.indexOf(pw[idx])+1})).sort((a,b)=>a.pos-b.pos);
+    const lastJob=careerHistory.length>0?careerHistory[careerHistory.length-1]:null;
     return (
     <div style={{background:"#0e1220",minHeight:"100vh",fontFamily:"'Tahoma',sans-serif",fontSize:11,display:"flex",flexDirection:"column"}}>
       <style>{css}</style>
@@ -1126,18 +1146,29 @@ export default function RM(){
         <div style={{fontFamily:"'Georgia','Times New Roman',serif",fontSize:13,fontStyle:"italic",color:"#c0c8e0"}}>{league}</div>
         <div style={{fontSize:9,color:"#506080",marginTop:2}}>These clubs need saving. Pick one.</div>
       </div>
-      <div className="cm-panel" style={{margin:2,flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div className="cm-panel" style={{margin:2,flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div className="cm-sunken" style={{margin:4,flex:1,overflowY:"auto"}}>
           <table className="cm-table">
             <thead><tr><th>#</th><th style={{textAlign:"left"}}>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th><th></th></tr></thead>
-            <tbody>{pickTeams.map(({idx,t,pos})=> <tr key={idx} className={pos>=18?"rel":""}>
-              <td style={{fontWeight:"bold"}}>{pos}</td>
-              <td style={{textAlign:"left"}}>{t.nm}</td>
-              <td>{t.w+t.d+t.l}</td><td>{t.w}</td><td>{t.d}</td><td>{t.l}</td>
-              <td style={{color:t.gf-t.ga>0?"#40c040":t.gf-t.ga<0?"#ff4040":"#506080"}}>{t.gf-t.ga>0?"+":""}{t.gf-t.ga}</td>
-              <td style={{fontWeight:900,color:"#ffd700"}}>{t.pts}</td>
-              <td><button className="cm-btn green" onClick={()=>startGame(idx)} style={{fontSize:9,padding:"2px 8px"}}>Manage</button></td>
-            </tr>)}</tbody>
+            <tbody>{pickTeams.map(({idx,t,pos})=>{
+              const isLastClub=lastJob&&lastJob.league===league&&lastJob.team===t.nm;
+              return <tr key={idx} className={pos>=18?"rel":""} style={{opacity:isLastClub?0.35:1}}>
+                <td style={{fontWeight:"bold"}}>{pos}</td>
+                <td style={{textAlign:"left"}}>{t.nm}</td>
+                <td>{t.w+t.d+t.l}</td><td>{t.w}</td><td>{t.d}</td><td>{t.l}</td>
+                <td style={{color:t.gf-t.ga>0?"#40c040":t.gf-t.ga<0?"#ff4040":"#506080"}}>{t.gf-t.ga>0?"+":""}{t.gf-t.ga}</td>
+                <td style={{fontWeight:900,color:"#ffd700"}}>{t.pts}</td>
+                <td>
+                  <button
+                    className="cm-btn green"
+                    onClick={isLastClub?undefined:()=>startGame(idx)}
+                    style={{fontSize:9,padding:"2px 8px",opacity:isLastClub?0.6:1,cursor:isLastClub?"default":"pointer"}}
+                  >
+                    {isLastClub?"Contract ended":"Manage"}
+                  </button>
+                </td>
+              </tr>;
+            })}</tbody>
           </table>
         </div>
         <div style={{padding:"6px",display:"flex",justifyContent:"center"}}>
@@ -1184,6 +1215,15 @@ export default function RM(){
         </div>
         <div style={{fontSize:12,fontWeight:"bold",color:"#ffd700",marginTop:4}}>Final: {pPos}{pPos===1?"st":pPos===2?"nd":pPos===3?"rd":"th"} — {pt.pts} points</div>
       </div>
+      <div style={{background:"#141830",borderBottom:"1px solid #2a3050",padding:"4px 10px",display:"flex",justifyContent:"flex-end"}}>
+        <button
+          className="cm-btn green"
+          onClick={()=>{setScr("title");setTeams([]);setActiveSave(null);}}
+          style={{fontSize:10,fontWeight:"bold",padding:"4px 14px"}}
+        >
+          Save another club
+        </button>
+      </div>
       <div style={{display:"flex",gap:1,margin:"2px 2px 0"}}>
         <button className={`cm-btn${endTab==="news"?" act":""}`} onClick={()=>setEndTab("news")} style={{flex:1}}>Season Summary</button>
         <button className={`cm-btn${endTab==="table"?" act":""}`} onClick={()=>setEndTab("table")} style={{flex:1}}>Final Table</button>
@@ -1200,9 +1240,6 @@ export default function RM(){
           <table className="cm-table"><thead><tr><th>#</th><th style={{textAlign:"left"}}>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th></tr></thead>
             <tbody>{sorted.map((t,i)=> <tr key={t.id} className={t.isP?"sel":i>=17?"rel":""}><td style={{fontWeight:"bold"}}>{i+1}</td><td style={{textAlign:"left"}}>{t.nm}</td><td>{t.w+t.d+t.l}</td><td>{t.w}</td><td>{t.d}</td><td>{t.l}</td><td>{t.gf-t.ga>0?"+":""}{t.gf-t.ga}</td><td style={{fontWeight:900}}>{t.pts}</td></tr>)}</tbody></table>
         </div>}
-        <div style={{padding:"6px",display:"flex",justifyContent:"center"}}>
-          <button className="cm-btn" onClick={()=>{setScr("title");setTeams([]);setActiveSave(null);}} style={{padding:"6px 20px"}}>Play Again</button>
-        </div>
       </div>
     </div>
   );
@@ -1459,7 +1496,20 @@ export default function RM(){
             {/* Player list */}
             <div className="cm-sunken" style={{flex:1,overflowY:"auto",margin:"0 4px 4px"}}>
               <table className="cm-table">
-                <thead><tr><th style={{width:24}}>#</th><th style={{textAlign:"left"}}>Name</th><th>Pos</th><th>OVR</th><th>Fit</th><th>Avg</th><th>Mor</th><th style={{width:24}}></th></tr></thead>
+                <thead><tr>
+                  <th style={{width:24}}>#</th>
+                  <th style={{textAlign:"left"}}>Name</th>
+                  <th>Pos</th>
+                  <th>OVR</th>
+                  <th>Fit</th>
+                  <th>Avg</th>
+                  <th>Apps</th>
+                  <th>G</th>
+                  <th>A</th>
+                  <th>Y/R</th>
+                  <th>Mor</th>
+                  <th style={{width:24}}></th>
+                </tr></thead>
                 <tbody>{(()=>{
                   const assigned=new Set([...pt.xi,...pt.sub]);
                   const sq=[...pt.sq];
@@ -1488,6 +1538,10 @@ export default function RM(){
                       <td style={{fontWeight:"bold",color:p.ovr>=75?"#40ff40":p.ovr>=55?"#ffd700":"#ff6060"}}>{p.ovr}</td>
                       <td style={{color:p.fit<60?"#ff4040":"#c0c8e0"}}>{p.fit}</td>
                       <td style={{color:avgCol,fontWeight:"bold"}}>{avg}</td>
+                      <td>{p.ap||0}</td>
+                      <td>{p.g||0}</td>
+                      <td>{p.a||0}</td>
+                      <td style={{fontSize:9}}>{(p.yc||0)}/{(p.rc||0)}</td>
                       <td style={{color:mor.col,fontSize:9}}>{mor.txt}</td>
                       <td style={{opacity:p.inj>0?1/0.35:1}}><button className="cm-btn" onClick={e=>{e.stopPropagation();setSel(p);}} style={{fontSize:8,padding:"1px 4px",minHeight:18,background:"#2040b0",color:"#fff",borderRadius:99,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center"}}>i</button></td>
                     </tr>;
