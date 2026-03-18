@@ -1431,7 +1431,7 @@ export default function RM(){
 
       <div className="cm-panel" style={{flex:1,margin:2,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         {sel&&<div style={{padding:6}}>
-          <div className="cm-title" style={{marginBottom:2}}><span>{sel.nm} — {POS_L[sel.pos]} — Age {sel.age}</span><div style={{marginLeft:"auto",display:"flex",gap:2}}>{canSell?<button className="cm-btn" onClick={()=>sell(sel)} style={{fontSize:10,color:"#ff4040"}}>Sell</button>:<button className="cm-btn" style={{fontSize:10,opacity:0.3,cursor:"default"}}>Min squad</button>}<button className="cm-btn" onClick={()=>setSel(null)} style={{fontSize:10}}>✕</button></div></div>
+          <div className="cm-title" style={{marginBottom:2}}><span>{sel.nm} — {POS_L[sel.pos]} — Age {sel.age}</span><div style={{marginLeft:"auto",display:"flex",gap:2}}>{canSell?<button className="cm-btn" onClick={()=>sell(sel)} style={{fontSize:10,color:"#ff4040"}}>Sell £{((sel.val||0)/1e6).toFixed(1)}M</button>:<button className="cm-btn" style={{fontSize:10,opacity:0.3,cursor:"default"}}>Min squad</button>}<button className="cm-btn" onClick={()=>setSel(null)} style={{fontSize:10}}>✕</button></div></div>
           <div className="cm-sunken" style={{padding:6}}>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:6,fontSize:10}}>
               <span>OVR: <b>{sel.ovr}</b></span><span>Fit: <b style={{color:sel.fit<60?"#c00":"#000"}}>{sel.fit}%</b></span>
@@ -1531,20 +1531,22 @@ export default function RM(){
                     const avg=(p.frm/99*6+4).toFixed(1);
                     const avgCol=avg>=7.5?"#40ff40":avg>=6.5?"#ffd700":avg>=5.5?"#c0c8e0":"#ff6060";
                     const mor=moraleWord(p.mor||50);
-                    return <tr key={p.id} className={isMatch&&!isAssigned&&p.inj===0?"xi":""} style={{opacity:(isAssigned&&slotSel)||p.inj>0?0.35:1,cursor:slotSel&&!isAssigned&&p.inj===0?"pointer":"default"}}
+                    const injDim=p.inj>0;
+                    const slotDim=isAssigned&&slotSel&&p.inj===0;
+                    return <tr key={p.id} className={isMatch&&!isAssigned&&p.inj===0?"xi":""} style={{opacity:slotDim?0.35:1,cursor:slotSel&&!isAssigned&&p.inj===0?"pointer":"default"}}
                       onClick={()=>{if(slotSel&&!isAssigned&&p.inj===0)assignToSlot(p.id);}}>
-                      <td style={{color:xiIdx>=0?"#40c040":subIdx>=0?"#4080e0":"#303848",fontWeight:"bold",fontSize:9}}>{sqNum}</td>
-                      <td style={{textAlign:"left",fontWeight:isMatch?"bold":"normal"}}>{p.nm}{p.inj>0?" 🏥":""}{p.youth?<span style={{fontSize:8,color:"#d0a030",fontWeight:"bold",marginLeft:4}}>U21</span>:""}{p.signedWk!=null&&wk-p.signedWk<4?<span style={{fontSize:8,color:"#40c040",fontWeight:"bold",marginLeft:4}}>NEW</span>:""}</td>
-                      <td>{p.pos}</td>
-                      <td style={{fontWeight:"bold",color:p.ovr>=75?"#40ff40":p.ovr>=55?"#ffd700":"#ff6060"}}>{p.ovr}</td>
-                      <td style={{color:p.fit<60?"#ff4040":"#c0c8e0"}}>{p.fit}</td>
-                      <td style={{color:avgCol,fontWeight:"bold"}}>{avg}</td>
-                      <td>{p.ap||0}</td>
-                      <td>{p.g||0}</td>
-                      <td>{p.a||0}</td>
-                      <td style={{fontSize:9}}>{(p.yc||0)}/{(p.rc||0)}</td>
-                      <td style={{color:mor.col,fontSize:9}}>{mor.txt}</td>
-                      <td style={{opacity:p.inj>0?1/0.35:1}}><button className="cm-btn" onClick={e=>{e.stopPropagation();setSel(p);}} style={{fontSize:8,padding:"1px 4px",minHeight:18,background:"#2040b0",color:"#fff",borderRadius:99,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center"}}>i</button></td>
+                      <td style={{color:xiIdx>=0?"#40c040":subIdx>=0?"#4080e0":"#303848",fontWeight:"bold",fontSize:9,opacity:injDim?0.35:1}}>{sqNum}</td>
+                      <td style={{textAlign:"left",fontWeight:isMatch?"bold":"normal",opacity:injDim?0.35:1}}>{p.nm}{p.inj>0?" 🏥":""}{p.youth?<span style={{fontSize:8,color:"#d0a030",fontWeight:"bold",marginLeft:4}}>U21</span>:""}{p.signedWk!=null&&wk-p.signedWk<4?<span style={{fontSize:8,color:"#40c040",fontWeight:"bold",marginLeft:4}}>NEW</span>:""}</td>
+                      <td style={{opacity:injDim?0.35:1}}>{p.pos}</td>
+                      <td style={{fontWeight:"bold",color:p.ovr>=75?"#40ff40":p.ovr>=55?"#ffd700":"#ff6060",opacity:injDim?0.35:1}}>{p.ovr}</td>
+                      <td style={{color:p.fit<60?"#ff4040":"#c0c8e0",opacity:injDim?0.35:1}}>{p.fit}</td>
+                      <td style={{color:avgCol,fontWeight:"bold",opacity:injDim?0.35:1}}>{avg}</td>
+                      <td style={{opacity:injDim?0.35:1}}>{p.ap||0}</td>
+                      <td style={{opacity:injDim?0.35:1}}>{p.g||0}</td>
+                      <td style={{opacity:injDim?0.35:1}}>{p.a||0}</td>
+                      <td style={{fontSize:9,opacity:injDim?0.35:1}}>{(p.yc||0)}/{(p.rc||0)}</td>
+                      <td style={{color:mor.col,fontSize:9,opacity:injDim?0.35:1}}>{mor.txt}</td>
+                      <td><button type="button" className="cm-btn" onClick={e=>{e.stopPropagation();setSel(p);}} style={{fontSize:8,padding:"1px 4px",minHeight:18,background:"#2040b0",color:"#fff",borderRadius:99,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center"}}>i</button></td>
                     </tr>;
                   });
                 })()}</tbody>
