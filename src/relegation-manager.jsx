@@ -1025,7 +1025,7 @@ export default function RM(){
   function buy(p){if(!canBuy||pt.bud<p.ask)return;const nt=[...teams];nt[pIdx]={...nt[pIdx],sq:[...nt[pIdx].sq,{...p,g:0,a:0,ap:0,yc:0,rc:0,inj:0,sus:0,signedWk:wk}],bud:nt[pIdx].bud-p.ask};setTeams(nt);setTList(l=>l.filter(x=>x.id!==p.id));
     setNews(n=>[...n,{w:wk,fr:"Transfer",su:`${p.nm} signs`,bo:`${p.nm} has completed his move to the club. ${p.club.includes("Loan")?"Loan until end of season.":""}`}]);
   }
-  function sell(p){if(!canSell)return;const pr=Math.round(p.val*(0.5+Math.random()*0.3));const nt=[...teams];nt[pIdx]={...nt[pIdx],sq:nt[pIdx].sq.filter(x=>x.id!==p.id),bud:nt[pIdx].bud+pr,xi:nt[pIdx].xi.filter(x=>x!==p.id),sub:nt[pIdx].sub.filter(x=>x!==p.id)};setTeams(nt);setNews(n=>[...n,{w:wk,tx:`${p.nm} leaves ${pt.nm}`}]);setSel(null);}
+  function sell(p){if(!canSell)return;const pr=Math.round(p.val||0);const nt=[...teams];nt[pIdx]={...nt[pIdx],sq:nt[pIdx].sq.filter(x=>x.id!==p.id),bud:nt[pIdx].bud+pr,xi:nt[pIdx].xi.filter(x=>x!==p.id),sub:nt[pIdx].sub.filter(x=>x!==p.id)};setTeams(nt);setNews(n=>[...n,{w:wk,tx:`${p.nm} sold for £${(pr/1e6).toFixed(1)}M`}]);setSel(null);}
   function assignToSlot(playerId){
     if(!slotSel)return;
     const nt=[...teams];const t={...nt[pIdx]};
@@ -1436,6 +1436,7 @@ export default function RM(){
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:6,fontSize:10}}>
               <span>OVR: <b>{sel.ovr}</b></span><span>Fit: <b style={{color:sel.fit<60?"#c00":"#000"}}>{sel.fit}%</b></span>
               <span>Form: <b>{sel.frm}</b></span><span>Morale: <b>{sel.mor}</b></span>
+              <span>Value: <b style={{color:"#ffd700"}}>£{((sel.val||0)/1e6).toFixed(1)}M</b></span>
               {sel.inj>0&&<span style={{color:"#ff4040",fontWeight:"bold"}}>INJURED {sel.inj}w</span>}
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:3}}>
