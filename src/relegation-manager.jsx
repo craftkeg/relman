@@ -678,10 +678,10 @@ export default function RM(){
   const nextGameRef=useRef(null);
   /** After a match, re-run autoSave when the async press quote is appended to news. */
   const pressSaveRef=useRef(null);
+  const pressNonceRef=useRef(0);
   const [streak,setStreak]=useState(0);
   const [training,setTraining]=useState("Fitness");
-  /** Post-match press: pending = in-flight fetch; result = headline + quote (+ detail if fallback). */
-  /** In-flight press quote; result goes into News as a CM-style inbox item. */
+  /** { headline, data, week, token } while Azure quote is loading; token matches News stub row _press. */
   const [pressPending,setPressPending]=useState(null);
 
   // Load career history from persistent storage on mount
@@ -692,34 +692,39 @@ export default function RM(){
 
   useEffect(()=>{
     if(!pressPending)return;
-    const {data,headline,week}=pressPending;
-    const ac=new AbortController();
+    const {data,headline,week,token}=pressPending;
+    let cancelled=false;
     const appendPressNews=(r,errDetail)=>{
       const quote=r?.quote||"It's been a long day — we'll speak again at the next match.";
       const bo=errDetail?`\u201c${quote}\u201d\n\n\u2014 ${errDetail}`:r&&r.ok?`\u201c${quote}\u201d`:`\u201c${quote}\u201d${r&&r.detail?`\n\n\u2014 ${r.detail}`:""}`;
+      const row={w:week,fr:"Media",su:`Press: ${headline}`,bo,pc:1};
       setNews(prev=>{
-        const next=[...prev,{w:week,fr:"Media",su:`Press: ${headline}`,bo,pc:1}];
+        const idx=token!=null?prev.findIndex(n=>n._press===token):-1;
+        const next=idx>=0?(()=>{const cp=[...prev];cp[idx]=row;return cp;})():[...prev,row];
         const p=pressSaveRef.current;
         if(p){
-          void autoSave(p.nt,p.fix,p.wk,next,p.pIdx,p.league,p.trainHist,p.training,p.streak,p.teamTalk,p.mustWinCount);
+          try{
+            void autoSave(p.nt,p.fix,p.wk,next,p.pIdx,p.league,p.trainHist,p.training,p.streak,p.teamTalk,p.mustWinCount);
+          }catch(_){/* ignore */}
           pressSaveRef.current=null;
         }
         return next;
       });
       setTab("news");
     };
-    fetchPressConferenceQuote(data,{signal:ac.signal})
+    // No AbortController cleanup: aborting raced the .then in Strict Mode and skipped appending entirely.
+    fetchPressConferenceQuote(data)
       .then(r=>{
-        if(ac.signal.aborted)return;
+        if(cancelled)return;
         setPressPending(null);
         appendPressNews(r);
       })
       .catch(e=>{
-        if(e?.name==="AbortError")return;
+        if(cancelled)return;
         setPressPending(null);
         appendPressNews(null,String(e?.message||e));
       });
-    return()=>ac.abort();
+    return()=>{cancelled=true;};
   },[pressPending]);
 
   async function saveCareer(entry){
@@ -1002,7 +1007,18 @@ export default function RM(){
       };
     }
 
-    setTeams(nt);setLast({h:home.nm,a:away.nm,hg,ag});setWk(nextWk);setMM(false);setNews(newNews);
+    let finalNews=newNews;
+    if(pcData){
+      const tok=++pressNonceRef.current;
+      const hl=`${home.nm} ${hg} - ${ag} ${away.nm}`;
+      pressSaveRef.current={nt,fix,wk:nextWk,pIdx,league,trainHist:newTrainHist,training,streak:newStreak,teamTalk,mustWinCount};
+      setPressPending({headline:hl,data:pcData,week:nextWk,token:tok});
+      finalNews=[...newNews,{w:nextWk,fr:"Media",su:`Press: ${hl}`,bo:"Speaking to the press…",pc:1,_press:tok}];
+    }else{
+      setPressPending(null);pressSaveRef.current=null;
+    }
+
+    setTeams(nt);setLast({h:home.nm,a:away.nm,hg,ag});setWk(nextWk);setMM(false);setNews(finalNews);
     if(board.sacked){
       setPressPending(null);pressSaveRef.current=null;
       clearSave();
@@ -1015,15 +1031,9 @@ export default function RM(){
       setScr("sacked");return;
     }
     if(nextWk>=38){setPressPending(null);pressSaveRef.current=null;clearSave();endSeason();return;}
-    if(pcData){
-      pressSaveRef.current={nt,fix,wk:nextWk,pIdx,league,trainHist:newTrainHist,training,streak:newStreak,teamTalk,mustWinCount};
-      setPressPending({headline:`${home.nm} ${hg} - ${ag} ${away.nm}`,data:pcData,week:nextWk});
-    }else{
-      setPressPending(null);pressSaveRef.current=null;
-    }
-    // Auto-save after each match
-    autoSave(nt,fix,nextWk,newNews,pIdx,league,newTrainHist,training,newStreak,teamTalk,mustWinCount);
-    if(board.msgs.length>0)setTab("news");
+    // Auto-save after each match (includes press stub row when pcData)
+    autoSave(nt,fix,nextWk,finalNews,pIdx,league,newTrainHist,training,newStreak,teamTalk,mustWinCount);
+    if(board.msgs.length>0||pcData)setTab("news");
   }
 
   function endSeason(){
