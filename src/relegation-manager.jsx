@@ -648,6 +648,17 @@ function LiveMatch({teams,pIdx,fix,wk,mEv,mH,mA,otherR,onFinish,onTeams}){
   );
 }
 
+// Strip outer quotes from model text so we don’t double-wrap with \u201c \u201d in News.
+function trimPressQuoteOuter(s){
+  let t=String(s||"").trim();
+  for(let i=0;i<6;i++){
+    const u=t.replace(/^[\u201c\u201e"]+/,"").replace(/[\u201d"]+$/,"").trim();
+    if(u===t)break;
+    t=u;
+  }
+  return t;
+}
+
 // ── MAIN ──────────────────────────────────────────────────
 export default function RM(){
   const [scr,setScr]=useState("title");
@@ -695,7 +706,8 @@ export default function RM(){
     const {data,headline,week,token}=pressPending;
     let cancelled=false;
     const appendPressNews=(r,errDetail)=>{
-      const quote=r?.quote||"It's been a long day — we'll speak again at the next match.";
+      const raw=r?.quote||"It's been a long day — we'll speak again at the next match.";
+      const quote=trimPressQuoteOuter(raw);
       const bo=errDetail?`\u201c${quote}\u201d\n\n\u2014 ${errDetail}`:r&&r.ok?`\u201c${quote}\u201d`:`\u201c${quote}\u201d${r&&r.detail?`\n\n\u2014 ${r.detail}`:""}`;
       const row={w:week,fr:"Media",su:`Press: ${headline}`,bo,pc:1};
       setNews(prev=>{
