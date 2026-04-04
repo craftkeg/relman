@@ -676,11 +676,13 @@ export default function RM(){
   const [endTab,setEndTab]=useState("news");
   const gamesRef=useRef(null);
   const nextGameRef=useRef(null);
+  /** After a match, re-run autoSave when the async press quote is appended to news. */
+  const pressSaveRef=useRef(null);
   const [streak,setStreak]=useState(0);
   const [training,setTraining]=useState("Fitness");
   /** Post-match press: pending = in-flight fetch; result = headline + quote (+ detail if fallback). */
+  /** In-flight press quote; result goes into News as a CM-style inbox item. */
   const [pressPending,setPressPending]=useState(null);
-  const [pressResult,setPressResult]=useState(null);
 
   // Load career history from persistent storage on mount
   useEffect(()=>{
@@ -690,18 +692,32 @@ export default function RM(){
 
   useEffect(()=>{
     if(!pressPending)return;
-    const {data,headline}=pressPending;
+    const {data,headline,week}=pressPending;
     const ac=new AbortController();
+    const appendPressNews=(r,errDetail)=>{
+      const quote=r?.quote||"It's been a long day — we'll speak again at the next match.";
+      const bo=errDetail?`\u201c${quote}\u201d\n\n\u2014 ${errDetail}`:r&&r.ok?`\u201c${quote}\u201d`:`\u201c${quote}\u201d${r&&r.detail?`\n\n\u2014 ${r.detail}`:""}`;
+      setNews(prev=>{
+        const next=[...prev,{w:week,fr:"Media",su:`Press: ${headline}`,bo,pc:1}];
+        const p=pressSaveRef.current;
+        if(p){
+          void autoSave(p.nt,p.fix,p.wk,next,p.pIdx,p.league,p.trainHist,p.training,p.streak,p.teamTalk,p.mustWinCount);
+          pressSaveRef.current=null;
+        }
+        return next;
+      });
+      setTab("news");
+    };
     fetchPressConferenceQuote(data,{signal:ac.signal})
       .then(r=>{
         if(ac.signal.aborted)return;
         setPressPending(null);
-        setPressResult({headline,ok:r.ok,quote:r.quote,detail:r.detail||""});
+        appendPressNews(r);
       })
       .catch(e=>{
         if(e?.name==="AbortError")return;
         setPressPending(null);
-        setPressResult({headline,ok:false,quote:"It's been a long day — we'll speak again at the next match.",detail:String(e?.message||e)});
+        appendPressNews(null,String(e?.message||e));
       });
     return()=>ac.abort();
   },[pressPending]);
@@ -737,7 +753,7 @@ export default function RM(){
       setLeague(s.league);setTeams(s.teams);setFix(s.fix);setWk(s.wk);setNews(s.news||[]);setPIdx(s.pIdx);
       setTrainHist(s.trainHist||[]);setTraining(s.training||"Fitness");setStreak(s.streak||0);
       setTeamTalk(s.teamTalk||null);setMustWinCount(s.mustWinCount||0);
-      setTList(mkTL());setTab("squad");setScr("game");setPressPending(null);setPressResult(null);
+      setTList(mkTL());setTab("squad");setScr("game");setPressPending(null);pressSaveRef.current=null;
     }}catch(e){console.error(e);}})();
   }
 
@@ -768,7 +784,7 @@ export default function RM(){
   function startGame(idx){
     const world=applyPlayerChoice(preWorld,idx);
     setTeams(world.teams);setPIdx(idx);setFix(world.fix);setWk(world.startWk);
-    setTab("squad");setStreak(0);setSel(null);setLast(null);setTraining("Fitness");setTrainHist([]);setMustWinCount(0);setTeamTalk(null);setPressPending(null);setPressResult(null);
+    setTab("squad");setStreak(0);setSel(null);setLast(null);setTraining("Fitness");setTrainHist([]);setMustWinCount(0);setTeamTalk(null);setPressPending(null);pressSaveRef.current=null;
     const pt=world.teams[idx];
     const s=[...world.teams].sort((a,b)=>b.pts-a.pts||(b.gf-b.ga)-(a.gf-a.ga));
     const pos=s.indexOf(pt)+1;
@@ -824,7 +840,7 @@ export default function RM(){
   }
 
   function startLive(){
-    setPressPending(null);setPressResult(null);
+    setPressPending(null);pressSaveRef.current=null;
     if(wk>=38){endSeason();return;}
     const round=fix[wk];const pm=round.find(m=>m.h===pIdx||m.a===pIdx);if(!pm)return;
     const nt=teams.map(t=>({...t,sq:t.sq.map(p=>({...p,at:{...p.at}}))}));
@@ -988,7 +1004,7 @@ export default function RM(){
 
     setTeams(nt);setLast({h:home.nm,a:away.nm,hg,ag});setWk(nextWk);setMM(false);setNews(newNews);
     if(board.sacked){
-      setPressPending(null);setPressResult(null);
+      setPressPending(null);pressSaveRef.current=null;
       clearSave();
       const myGames=fix.slice(19,nextWk).map(rd=>rd.find(m=>m.h===pIdx||m.a===pIdx)).filter(m=>m&&m.done);
       let sW=0,sD=0,sL=0,sGF=0,sGA=0;
@@ -998,12 +1014,12 @@ export default function RM(){
       saveCareer({league,team:nt[pIdx].nm,teamColors:nt[pIdx].c||["#ccc","#fff"],outcome:"sacked",finalPos:sPos,pts:nt[pIdx].pts,w:sW,d:sD,l:sL,gf:sGF,ga:sGA,playerOfSeason:null,topScorer:null,bestSigning:null,date:new Date().toISOString().slice(0,10)});
       setScr("sacked");return;
     }
-    if(nextWk>=38){setPressPending(null);setPressResult(null);clearSave();endSeason();return;}
+    if(nextWk>=38){setPressPending(null);pressSaveRef.current=null;clearSave();endSeason();return;}
     if(pcData){
-      setPressResult(null);
-      setPressPending({headline:`${home.nm} ${hg} - ${ag} ${away.nm}`,data:pcData});
+      pressSaveRef.current={nt,fix,wk:nextWk,pIdx,league,trainHist:newTrainHist,training,streak:newStreak,teamTalk,mustWinCount};
+      setPressPending({headline:`${home.nm} ${hg} - ${ag} ${away.nm}`,data:pcData,week:nextWk});
     }else{
-      setPressPending(null);setPressResult(null);
+      setPressPending(null);pressSaveRef.current=null;
     }
     // Auto-save after each match
     autoSave(nt,fix,nextWk,newNews,pIdx,league,newTrainHist,training,newStreak,teamTalk,mustWinCount);
@@ -1290,9 +1306,9 @@ export default function RM(){
       </div>
       <div className="cm-panel" style={{margin:2,flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         {endTab==="news"?<div className="cm-sunken" style={{margin:4,flex:1,overflowY:"auto"}}>
-          {[...news].reverse().map((n,i)=> <div key={i} style={{padding:n.fr?"6px":"3px 6px",borderBottom:"1px solid #1e2540",fontSize:10}}>
+          {[...news].reverse().map((n,i)=> <div key={i} style={{padding:n.fr?"6px":"3px 6px",borderBottom:"1px solid #1e2540",fontSize:10,borderLeft:n.pc?"3px solid #ffd700":"none",paddingLeft:n.pc?7:undefined}}>
             <span style={{color:"#506080",marginRight:6}}>Wk{n.w}</span>
-            {n.fr?<><span style={{color:"#6090e0",fontWeight:"bold"}}>{n.fr}: </span><span style={{color:"#ffd700"}}>{n.su}</span><div style={{color:"#8090b0",marginTop:2,paddingLeft:2}}>{n.bo}</div></>
+            {n.fr?<><span style={{color:"#6090e0",fontWeight:"bold"}}>{n.fr}: </span><span style={{color:"#ffd700"}}>{n.su}</span><div style={{color:"#8090b0",marginTop:2,paddingLeft:2,whiteSpace:"pre-wrap"}}>{n.bo}</div></>
             :<span>{n.tx}</span>}
           </div>)}
         </div>
@@ -1487,20 +1503,6 @@ export default function RM(){
         </div>
         <button className="cm-btn green" onClick={()=>{setTeamTalk(null);setTalkScreen(true);}} style={{fontWeight:"bold"}}>▶ Continue</button>
       </div>
-      {(pressPending||pressResult)&&(
-        <div className="cm-panel" style={{margin:"2px 2px 0",border:"1px solid #2a3050"}}>
-          <div className="cm-title" style={{padding:"4px 8px"}}>POST-MATCH PRESS CONFERENCE</div>
-          <div className="cm-sunken" style={{margin:2,padding:8}}>
-            <div style={{fontSize:10,color:"#8090b0",marginBottom:6}}>{pressPending?.headline||pressResult?.headline}</div>
-            {pressPending&&<div style={{fontStyle:"italic",color:"#ffd700"}}>Manager is speaking to the press...</div>}
-            {pressResult&&<div style={{color:"#c0c8e0",lineHeight:1.5,fontSize:11,whiteSpace:"pre-wrap"}}>&ldquo;{pressResult.quote}&rdquo;</div>}
-            {pressResult&&!pressResult.ok&&pressResult.detail&&<div style={{fontSize:9,color:"#a08060",marginTop:8,lineHeight:1.4,whiteSpace:"pre-wrap"}}>{pressResult.detail}</div>}
-          </div>
-          <div style={{padding:"4px 8px",display:"flex",justifyContent:"flex-end",borderTop:"1px solid #2a3050"}}>
-            <button type="button" className="cm-btn" onClick={()=>{setPressPending(null);setPressResult(null);}} style={{fontSize:10}}>Dismiss</button>
-          </div>
-        </div>
-      )}
       <div style={{display:"flex",gap:1,margin:"2px 2px 0",flexWrap:"wrap"}}>{TABS.map(([k,l])=> <button key={k} className={`cm-btn${tab===k?" act":""}`} onClick={()=>{setTab(k);setSel(null);setSelT(null);setSlotSel(null);}} style={{flex:"1 1 auto"}}>{l}</button>)}</div>
 
       <div className="cm-panel" style={{flex:1,margin:2,display:"flex",flexDirection:"column",overflow:"hidden"}}>
@@ -1833,9 +1835,9 @@ export default function RM(){
           </div></div>}
 
           {tab==="news"&&<div style={{flex:1,overflowY:"auto"}}><div className="cm-sunken" style={{margin:4}}>
-            {[...news].reverse().map((n,i)=> <div key={i} style={{padding:n.fr?"6px":"3px 6px",borderBottom:"1px solid #1e2540",fontSize:10}}>
+            {[...news].reverse().map((n,i)=> <div key={i} style={{padding:n.fr?"6px":"3px 6px",borderBottom:"1px solid #1e2540",fontSize:10,borderLeft:n.pc?"3px solid #ffd700":"none",paddingLeft:n.pc?7:undefined}}>
               <span style={{color:"#506080",marginRight:6}}>Wk{n.w}</span>
-              {n.fr?<><span style={{color:"#6090e0",fontWeight:"bold"}}>{n.fr}: </span><span style={{color:"#ffd700"}}>{n.su}</span><div style={{color:"#8090b0",marginTop:2,paddingLeft:2}}>{n.bo}</div></>
+              {n.fr?<><span style={{color:"#6090e0",fontWeight:"bold"}}>{n.fr}: </span><span style={{color:"#ffd700"}}>{n.su}</span><div style={{color:"#8090b0",marginTop:2,paddingLeft:2,whiteSpace:"pre-wrap"}}>{n.bo}</div></>
               :<span>{n.tx}</span>}
             </div>)}
           </div></div>}
