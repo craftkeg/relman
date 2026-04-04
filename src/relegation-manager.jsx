@@ -709,7 +709,7 @@ export default function RM(){
       const raw=r?.quote||"It's been a long day — we'll speak again at the next match.";
       const quote=trimPressQuoteOuter(raw);
       const bo=errDetail?`\u201c${quote}\u201d\n\n\u2014 ${errDetail}`:r&&r.ok?`\u201c${quote}\u201d`:`\u201c${quote}\u201d${r&&r.detail?`\n\n\u2014 ${r.detail}`:""}`;
-      const row={w:week,fr:"Media",su:`Press: ${headline}`,bo,pc:1};
+      const row={w:week,fr:"Media",su:`Press Conference post result — ${headline}`,bo,pc:1};
       setNews(prev=>{
         const idx=token!=null?prev.findIndex(n=>n._press===token):-1;
         const next=idx>=0?(()=>{const cp=[...prev];cp[idx]=row;return cp;})():[...prev,row];
@@ -1025,7 +1025,7 @@ export default function RM(){
       const hl=`${home.nm} ${hg} - ${ag} ${away.nm}`;
       pressSaveRef.current={nt,fix,wk:nextWk,pIdx,league,trainHist,training,streak:newStreak,teamTalk,mustWinCount};
       setPressPending({headline:hl,data:pcData,week:nextWk,token:tok});
-      finalNews=[...newNews,{w:nextWk,fr:"Media",su:`Press: ${hl}`,bo:"Speaking to the press…",pc:1,_press:tok}];
+      finalNews=[...newNews,{w:nextWk,fr:"Media",su:`Press Conference post result — ${hl}`,bo:"Speaking to the press…",pc:1,_press:tok}];
     }else{
       setPressPending(null);pressSaveRef.current=null;
     }
