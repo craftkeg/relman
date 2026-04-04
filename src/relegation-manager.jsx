@@ -1011,7 +1011,7 @@ export default function RM(){
     if(pcData){
       const tok=++pressNonceRef.current;
       const hl=`${home.nm} ${hg} - ${ag} ${away.nm}`;
-      pressSaveRef.current={nt,fix,wk:nextWk,pIdx,league,trainHist:newTrainHist,training,streak:newStreak,teamTalk,mustWinCount};
+      pressSaveRef.current={nt,fix,wk:nextWk,pIdx,league,trainHist,training,streak:newStreak,teamTalk,mustWinCount};
       setPressPending({headline:hl,data:pcData,week:nextWk,token:tok});
       finalNews=[...newNews,{w:nextWk,fr:"Media",su:`Press: ${hl}`,bo:"Speaking to the press…",pc:1,_press:tok}];
     }else{
@@ -1032,7 +1032,7 @@ export default function RM(){
     }
     if(nextWk>=38){setPressPending(null);pressSaveRef.current=null;clearSave();endSeason();return;}
     // Auto-save after each match (includes press stub row when pcData)
-    autoSave(nt,fix,nextWk,finalNews,pIdx,league,newTrainHist,training,newStreak,teamTalk,mustWinCount);
+    autoSave(nt,fix,nextWk,finalNews,pIdx,league,trainHist,training,newStreak,teamTalk,mustWinCount);
     if(board.msgs.length>0||pcData)setTab("news");
   }
 
