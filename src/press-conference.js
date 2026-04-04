@@ -59,16 +59,25 @@ export async function generatePressConference(matchData) {
     .join(" ");
 
   const { endpoint, deployment, apiKey, apiVersion } = foundryConfig();
-  if (!endpoint || !apiKey) return getFallbackQuote(matchData);
+  if (!endpoint || !apiKey) {
+    if (import.meta.env.DEV) {
+      console.warn(
+        "[press-conference] Add VITE_AZURE_FOUNDRY_ENDPOINT and VITE_AZURE_FOUNDRY_API_KEY to .env.local (restart npm run dev)."
+      );
+    }
+    return getFallbackQuote(matchData);
+  }
+
+  const path = `/openai/deployments/${deployment}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`;
+  // Dev: same-origin proxy (see vite.config.js) so Azure CORS does not block the browser.
+  const url = import.meta.env.DEV ? `/api/azure-foundry${path}` : `${endpoint}${path}`;
+  const headers = { "Content-Type": "application/json" };
+  if (!import.meta.env.DEV) headers["api-key"] = apiKey;
 
   try {
-    const url = `${endpoint}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
     const response = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "api-key": apiKey,
-      },
+      headers,
       body: JSON.stringify({
         messages: [
           { role: "system", content: PRESS_SYSTEM_PROMPT },
@@ -80,7 +89,8 @@ export async function generatePressConference(matchData) {
     });
 
     if (!response.ok) {
-      console.error("Foundry API error:", response.status);
+      const errBody = await response.text();
+      console.error("[press-conference] Foundry API error:", response.status, errBody.slice(0, 400));
       return getFallbackQuote(matchData);
     }
 
@@ -102,4 +112,7 @@ export async function generatePressConference(matchData) {
   VITE_AZURE_FOUNDRY_API_KEY=your-key-here
   # optional:
   # VITE_AZURE_FOUNDRY_API_VERSION=2024-12-01-preview
+
+  npm run dev: requests go to /api/azure-foundry (Vite proxy) so the browser is not blocked by CORS.
+  npm run build + static host: you need a small serverless proxy unless Azure allows your site origin.
 */
