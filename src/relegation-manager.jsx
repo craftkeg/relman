@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { generatePressConference } from "./press-conference.js";
 
 // ── DATA ──────────────────────────────────────────────────
 const FN=["James","David","Michael","Chris","Daniel","Mark","Steve","Paul","Andrew","Tom","Ben","Sam","Jack","Ryan","Luke","Matt","Nathan","Scott","Gary","Lee","Wayne","Rio","Frank","John","Peter","Alan","Ian","Rob","Simon","Tony","Phil","Kevin","Nigel","Stuart","Craig","Darren","Jamie","Dean","Colin","Neil","Gareth","Owen","Aaron","Adam","Callum","Ethan","Liam","Noah","Oliver","Harry","George","Charlie","Leo","Alfie","Freddie","Oscar","Archie","Arthur","Henry","Jacob","Thomas","Joshua","William","Max","Theo","Finley","Sebastian","Elliot","Riley","Hugo","Louie","Toby","Reuben","Jude","Edward","Kai","Logan","Harvey","Harrison","Dylan","Elijah","Isaac","Tyler","Lucas","Jayden","Connor","Zack","Aiden","Blake","Kyle","Rhys","Caleb","Joel","Ellis","Evan","Rowan","Felix","Jesse","Troy","Miles","Rex","Finn","Cole","Noel","Ross","Kirk","Drew","Brent","Wade","Clay","Vince","Grant","Floyd","Lance","Clint","Hank","Chad","Seth","Kurt","Bart","Carl","Glen","Dale","Earl"];
@@ -582,14 +583,14 @@ function LiveMatch({teams,pIdx,fix,wk,mEv,mH,mA,otherR,onFinish,onTeams}){
             <div style={{padding:"4px 4px 2px",color:"#6090e0",fontWeight:"bold",fontSize:10}}>Player OFF:</div>
             <table className="cm-table" style={{marginBottom:8}}><thead><tr><th style={{textAlign:"left"}}>Name</th><th>Pos</th><th>Fit</th><th>Rtg</th></tr></thead>
             <tbody>{xi.map(p=>{const r=(matchRatings[p.nm]||6.0).toFixed(1);const f=matchFit(p);return <tr key={p.id} onClick={()=>setSubOff(subOff===p.id?null:p.id)} className={subOff===p.id?"sel":""} style={{cursor:"pointer"}}>
-              <td style={{textAlign:"left"}}>{p.nm}</td><td>{p.pos}</td>
+              <td style={{textAlign:"left"}}>{p.nm}{p.youth?<span style={{fontSize:8,color:"#d0a030",fontWeight:"bold",marginLeft:4}}>U21</span>:""}</td><td>{p.pos}</td>
               <td style={{color:f<50?"#ff4040":"#c0c8e0"}}>{f}</td>
               <td style={{color:ratingCol(parseFloat(r)),fontWeight:"bold"}}>{r}</td>
             </tr>;})}</tbody></table>
             {subOff&&<><div style={{padding:"4px 4px 2px",color:"#40c040",fontWeight:"bold",fontSize:10}}>Player ON:</div>
               <table className="cm-table"><thead><tr><th style={{textAlign:"left"}}>Name</th><th>Pos</th><th>OVR</th><th>Fit</th></tr></thead>
               <tbody>{bench.map(p=> <tr key={p.id} onClick={()=>doSub(subOff,p.id)} style={{cursor:"pointer"}}>
-                <td style={{textAlign:"left"}}>{p.nm}</td><td>{p.pos}</td>
+                <td style={{textAlign:"left"}}>{p.nm}{p.youth?<span style={{fontSize:8,color:"#d0a030",fontWeight:"bold",marginLeft:4}}>U21</span>:""}</td><td>{p.pos}</td>
                 <td style={{fontWeight:"bold",color:p.ovr>=55?"#ffd700":"#ff6060"}}>{p.ovr}</td>
                 <td style={{color:p.fit<60?"#ff4040":"#40c040"}}>{p.fit}</td>
               </tr>)}</tbody></table>
@@ -626,14 +627,14 @@ function LiveMatch({teams,pIdx,fix,wk,mEv,mH,mA,otherR,onFinish,onTeams}){
               return <div key={i} style={{position:"absolute",left:`${x}%`,top:`${y}%`,transform:"translate(-50%,-50%)",textAlign:"center",zIndex:2}}>
                 {arrow==="↑"&&<div style={{fontSize:10,color:"rgba(255,255,255,0.5)",lineHeight:1,marginBottom:-2}}>↑</div>}
                 <div style={{width:20,height:20,borderRadius:99,background:p?(pt.c||["#fff","#fff"])[0]:"rgba(255,255,255,0.2)",border:p?`2px solid ${(pt.c||["#fff","#fff"])[1]}`:"1px dashed rgba(255,255,255,0.4)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:900,color:p?(pt.c||["#000","#fff"])[1]:"rgba(255,255,255,0.5)",margin:"0 auto"}}>{p?p.ovr:pos}</div>
-                <div style={{fontSize:6,color:"#ffd700",marginTop:1,whiteSpace:"nowrap",textShadow:"0 1px 3px #000"}}>{p?p.nm.split(" ").pop():pos}</div>
+                <div style={{fontSize:6,color:"#ffd700",marginTop:1,whiteSpace:"nowrap",textShadow:"0 1px 3px #000"}}>{p?<>{p.nm.split(" ").pop()}{p.youth?<span style={{color:"#d0a030",fontWeight:"bold",marginLeft:1,fontSize:5}}>U21</span>:""}</>:pos}</div>
                 {arrow==="↓"&&<div style={{fontSize:10,color:"rgba(255,255,255,0.5)",lineHeight:1,marginTop:-1}}>↓</div>}
               </div>;})}
           </div>
           <div style={{fontWeight:"bold",color:"#6090e0",marginBottom:4,fontSize:10}}>Current XI:</div>
           <table className="cm-table"><thead><tr><th style={{textAlign:"left"}}>Name</th><th>Pos</th><th>Fit</th><th>Rtg</th></tr></thead>
           <tbody>{xi.map(p=>{const r=(matchRatings[p.nm]||6.0).toFixed(1);const f=matchFit(p);return <tr key={p.id}>
-            <td style={{textAlign:"left"}}>{p.nm}</td><td>{p.pos}</td>
+            <td style={{textAlign:"left"}}>{p.nm}{p.youth?<span style={{fontSize:8,color:"#d0a030",fontWeight:"bold",marginLeft:4}}>U21</span>:""}</td><td>{p.pos}</td>
             <td style={{color:f<50?"#ff4040":"#c0c8e0"}}>{f}</td>
             <td style={{color:ratingCol(parseFloat(r)),fontWeight:"bold"}}>{r}</td>
           </tr>;})}</tbody></table>
@@ -677,12 +678,28 @@ export default function RM(){
   const nextGameRef=useRef(null);
   const [streak,setStreak]=useState(0);
   const [training,setTraining]=useState("Fitness");
+  /** Post-match press conference: filled when returning from LiveMatch after finishMatch. */
+  const [postMatchPC,setPostMatchPC]=useState(null);
 
   // Load career history from persistent storage on mount
   useEffect(()=>{
     if(!window.storage)return;
     (async()=>{try{const r=await window.storage.get("career-history");if(r&&r.value)setCareerHistory(JSON.parse(r.value));}catch(e){}})();
   },[]);
+
+  useEffect(()=>{
+    if(!postMatchPC?.loading||!postMatchPC?.data)return;
+    const snap=postMatchPC.data;
+    let off=false;
+    generatePressConference(snap).then(r=>{
+      if(off)return;
+      setPostMatchPC(p=>{
+        if(!p||!p.loading||p.data!==snap)return p;
+        return {...p,loading:false,quote:r.quote,usedOffline:!r.fromApi};
+      });
+    });
+    return()=>{off=true;};
+  },[postMatchPC]);
 
   async function saveCareer(entry){
     const updated=[...careerHistory,entry];
@@ -715,7 +732,7 @@ export default function RM(){
       setLeague(s.league);setTeams(s.teams);setFix(s.fix);setWk(s.wk);setNews(s.news||[]);setPIdx(s.pIdx);
       setTrainHist(s.trainHist||[]);setTraining(s.training||"Fitness");setStreak(s.streak||0);
       setTeamTalk(s.teamTalk||null);setMustWinCount(s.mustWinCount||0);
-      setTList(mkTL());setTab("squad");setScr("game");
+      setTList(mkTL());setTab("squad");setScr("game");setPostMatchPC(null);
     }}catch(e){console.error(e);}})();
   }
 
@@ -746,7 +763,7 @@ export default function RM(){
   function startGame(idx){
     const world=applyPlayerChoice(preWorld,idx);
     setTeams(world.teams);setPIdx(idx);setFix(world.fix);setWk(world.startWk);
-    setTab("squad");setStreak(0);setSel(null);setLast(null);setTraining("Fitness");setTrainHist([]);setMustWinCount(0);setTeamTalk(null);
+    setTab("squad");setStreak(0);setSel(null);setLast(null);setTraining("Fitness");setTrainHist([]);setMustWinCount(0);setTeamTalk(null);setPostMatchPC(null);
     const pt=world.teams[idx];
     const s=[...world.teams].sort((a,b)=>b.pts-a.pts||(b.gf-b.ga)-(a.gf-a.ga));
     const pos=s.indexOf(pt)+1;
@@ -802,13 +819,14 @@ export default function RM(){
   }
 
   function startLive(){
+    setPostMatchPC(null);
     if(wk>=38){endSeason();return;}
     const round=fix[wk];const pm=round.find(m=>m.h===pIdx||m.a===pIdx);if(!pm)return;
     const nt=teams.map(t=>({...t,sq:t.sq.map(p=>({...p,at:{...p.at}}))}));
 
     // Promote youth if needed
     const youthPromoted=promoteYouth(nt,pIdx);
-    if(youthPromoted)setNews(n=>[...n,{w:wk,fr:"Asst. Manager",su:"Youth call-up",bo:"We've had to bring in some U21 lads to cover. They're not great but they'll do in an emergency."}]);
+    if(youthPromoted)setNews(n=>[...n,{w:wk,fr:"Asst. Manager",su:"Youth call-up",bo:"We've had to bring in some U21 lads to cover. They're marked U21 on the squad screen. They're not great but they'll do in an emergency."}]);
 
     // Auto-fill XI and subs if incomplete
     const pT=nt[pIdx];
@@ -917,6 +935,8 @@ export default function RM(){
     const myT=nt[pIdx];
     myT.xi=myT.xi.filter(id=>{const p=myT.sq.find(x=>x.id===id);return p&&p.inj===0;});
     myT.sub=myT.sub.filter(id=>{const p=myT.sq.find(x=>x.id===id);return p&&p.inj===0;});
+    // Promote emergency U21 cover right after injuries are processed so they are visible on the squad screen
+    const youthPromotedAfterMatch=promoteYouth(nt,pIdx);
 
     const newStreak=pWon?Math.max(1,streak+1):pLost?Math.min(-1,streak-1):0;
     setStreak(newStreak);
@@ -927,14 +947,43 @@ export default function RM(){
     const newNews=[...news,{w:nextWk,tx:`${home.nm} ${hg} - ${ag} ${away.nm}`}];
     board.msgs.forEach(m=>newNews.push({w:nextWk,...m}));
     if(nextWk<38&&!board.sacked){const scout=getScoutMsg(nt,pIdx,fix,nextWk);if(scout)newNews.push({w:nextWk,...scout});}
+    if(youthPromotedAfterMatch){
+      newNews.push({w:nextWk,fr:"Asst. Manager",su:"Youth call-up",bo:"We've had to bring in some U21 lads to cover injuries — look for the U21 tag on the squad list."});
+    }
     // Assistant manager morale warnings
     if(unhappyWarnings.length>0){
       const names=unhappyWarnings.slice(0,3).join(", ");
       newNews.push({w:nextWk,fr:"Asst. Manager",su:"Unhappy players",bo:`Boss, ${names}${unhappyWarnings.length>3?` and ${unhappyWarnings.length-3} others`:""} haven't been playing and ${unhappyWarnings.length===1?"is":"are"} getting frustrated. Might want to give ${unhappyWarnings.length===1?"him":"them"} some game time or it'll affect performance.`});
     }
 
+    let pcData=null;
+    if(!board.sacked&&nextWk<38){
+      const myG=isHome?hg:ag,og=isHome?ag:hg;
+      let pcResult="drew";
+      if(myG>og)pcResult="won";
+      else if(myG<og)pcResult="lost";
+      const goalsStr=disp.filter(e=>e.ty==="goal").map(e=>`${e.p} ${e.m}'`).join(", ");
+      const squad=nt[pIdx].sq;
+      const avgM=Math.round(squad.reduce((s,p)=>s+(p.mor||50),0)/Math.max(1,squad.length));
+      const morWord=avgM<45?"low":avgM<58?"mixed":"solid";
+      const sn=[...nt].sort((a,b)=>b.pts-a.pts||(b.gf-b.ga)-(a.gf-a.ga)||b.gf-a.gf);
+      const pn=sn.indexOf(nt[pIdx])+1;
+      const ord=n=>n===1?"st":n===2?"nd":n===3?"rd":"th";
+      pcData={
+        result:pcResult,
+        score:`${myG}-${og}`,
+        venue:isHome?"at home":"away",
+        opponent:(isHome?away:home).nm,
+        goals:goalsStr||undefined,
+        morale:morWord,
+        position:`${pn}${ord(pn)}`,
+        extra:"",
+      };
+    }
+
     setTeams(nt);setLast({h:home.nm,a:away.nm,hg,ag});setWk(nextWk);setMM(false);setNews(newNews);
     if(board.sacked){
+      setPostMatchPC(null);
       clearSave();
       const myGames=fix.slice(19,nextWk).map(rd=>rd.find(m=>m.h===pIdx||m.a===pIdx)).filter(m=>m&&m.done);
       let sW=0,sD=0,sL=0,sGF=0,sGA=0;
@@ -944,7 +993,9 @@ export default function RM(){
       saveCareer({league,team:nt[pIdx].nm,teamColors:nt[pIdx].c||["#ccc","#fff"],outcome:"sacked",finalPos:sPos,pts:nt[pIdx].pts,w:sW,d:sD,l:sL,gf:sGF,ga:sGA,playerOfSeason:null,topScorer:null,bestSigning:null,date:new Date().toISOString().slice(0,10)});
       setScr("sacked");return;
     }
-    if(nextWk>=38){clearSave();endSeason();return;}
+    if(nextWk>=38){setPostMatchPC(null);clearSave();endSeason();return;}
+    if(pcData)setPostMatchPC({loading:true,quote:null,headline:`${home.nm} ${hg} - ${ag} ${away.nm}`,usedOffline:false,data:pcData});
+    else setPostMatchPC(null);
     // Auto-save after each match
     autoSave(nt,fix,nextWk,newNews,pIdx,league,newTrainHist,training,newStreak,teamTalk,mustWinCount);
     if(board.msgs.length>0)setTab("news");
@@ -1360,7 +1411,7 @@ export default function RM(){
               {(opp.form||FORMS[0]).s.map((pos,i)=>{const pid=opp.xi[i];const p=pid&&opp.sq.find(x=>x.id===pid);const[x,y]=(opp.form||FORMS[0]).xy[i];
                 return <div key={i} style={{position:"absolute",left:`${x}%`,top:`${y}%`,transform:"translate(-50%,-50%)",textAlign:"center",zIndex:2}}>
                   <div style={{width:18,height:18,borderRadius:99,background:p?(opp.c||["#fff","#fff"])[0]:"rgba(255,255,255,0.2)",border:p?`2px solid ${(opp.c||["#fff","#fff"])[1]}`:"1px dashed rgba(255,255,255,0.4)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:900,color:p?(opp.c||["#000","#fff"])[1]:"rgba(255,255,255,0.5)",margin:"0 auto"}}>{p?p.ovr:pos}</div>
-                  <div style={{fontSize:6,color:"#ffd700",marginTop:1,whiteSpace:"nowrap",textShadow:"0 1px 3px #000"}}>{p?p.nm.split(" ").pop():pos}</div>
+                  <div style={{fontSize:6,color:"#ffd700",marginTop:1,whiteSpace:"nowrap",textShadow:"0 1px 3px #000"}}>{p?<>{p.nm.split(" ").pop()}{p.youth?<span style={{color:"#d0a030",fontWeight:"bold",marginLeft:1,fontSize:5}}>U21</span>:""}</>:pos}</div>
                 </div>;})}
             </div>
           </div>
@@ -1427,11 +1478,25 @@ export default function RM(){
         </div>
         <button className="cm-btn green" onClick={()=>{setTeamTalk(null);setTalkScreen(true);}} style={{fontWeight:"bold"}}>▶ Continue</button>
       </div>
+      {postMatchPC&&(
+        <div className="cm-panel" style={{margin:"2px 2px 0",border:"1px solid #2a3050"}}>
+          <div className="cm-title" style={{padding:"4px 8px"}}>POST-MATCH PRESS CONFERENCE</div>
+          <div className="cm-sunken" style={{margin:2,padding:8}}>
+            <div style={{fontSize:10,color:"#8090b0",marginBottom:6}}>{postMatchPC.headline}</div>
+            {postMatchPC.loading&&<div style={{fontStyle:"italic",color:"#ffd700"}}>Manager is speaking to the press...</div>}
+            {!postMatchPC.loading&&postMatchPC.quote&&<div style={{color:"#c0c8e0",lineHeight:1.5,fontSize:11,whiteSpace:"pre-wrap"}}>&ldquo;{postMatchPC.quote}&rdquo;</div>}
+            {postMatchPC.usedOffline&&!postMatchPC.loading&&<div style={{fontSize:9,color:"#506080",marginTop:6}}>Local press notes (API unavailable)</div>}
+          </div>
+          <div style={{padding:"4px 8px",display:"flex",justifyContent:"flex-end",borderTop:"1px solid #2a3050"}}>
+            <button type="button" className="cm-btn" onClick={()=>setPostMatchPC(null)} style={{fontSize:10}}>Dismiss</button>
+          </div>
+        </div>
+      )}
       <div style={{display:"flex",gap:1,margin:"2px 2px 0",flexWrap:"wrap"}}>{TABS.map(([k,l])=> <button key={k} className={`cm-btn${tab===k?" act":""}`} onClick={()=>{setTab(k);setSel(null);setSelT(null);setSlotSel(null);}} style={{flex:"1 1 auto"}}>{l}</button>)}</div>
 
       <div className="cm-panel" style={{flex:1,margin:2,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         {sel&&<div style={{padding:6}}>
-          <div className="cm-title" style={{marginBottom:2}}><span>{sel.nm} — {POS_L[sel.pos]} — Age {sel.age}</span><div style={{marginLeft:"auto",display:"flex",gap:2}}>{canSell?<button className="cm-btn" onClick={()=>sell(sel)} style={{fontSize:10,color:"#ff4040"}}>Sell £{((sel.val||0)/1e6).toFixed(1)}M</button>:<button className="cm-btn" style={{fontSize:10,opacity:0.3,cursor:"default"}}>Min squad</button>}<button className="cm-btn" onClick={()=>setSel(null)} style={{fontSize:10}}>✕</button></div></div>
+          <div className="cm-title" style={{marginBottom:2}}><span>{sel.nm}{sel.youth?<span style={{fontSize:10,color:"#d0a030",fontWeight:"bold",marginLeft:6}}>U21</span>:""} — {POS_L[sel.pos]} — Age {sel.age}</span><div style={{marginLeft:"auto",display:"flex",gap:2}}>{canSell?<button className="cm-btn" onClick={()=>sell(sel)} style={{fontSize:10,color:"#ff4040"}}>Sell £{((sel.val||0)/1e6).toFixed(1)}M</button>:<button className="cm-btn" style={{fontSize:10,opacity:0.3,cursor:"default"}}>Min squad</button>}<button className="cm-btn" onClick={()=>setSel(null)} style={{fontSize:10}}>✕</button></div></div>
           <div className="cm-sunken" style={{padding:6}}>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:6,fontSize:10}}>
               <span>OVR: <b>{sel.ovr}</b></span><span>Fit: <b style={{color:sel.fit<60?"#c00":"#000"}}>{sel.fit}%</b></span>
@@ -1472,7 +1537,7 @@ export default function RM(){
                     color:isSel?"#000":p?(pt.c||["#000","#fff"])[1]:"rgba(255,255,255,0.4)",
                     border:isSel?"2px solid #fff":p?`2px solid ${(pt.c||["#fff","#fff"])[1]}`:"1px dashed rgba(255,255,255,0.3)",
                     boxShadow:isSel?"0 0 10px rgba(255,215,0,0.5)":"none"}}>{p?p.ovr:pos}</div>
-                  <div style={{fontSize:7,color:isSel?"#fff":"#ffd700",marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textShadow:"0 1px 3px #000"}}>{p?p.nm.split(" ").pop():pos}{isSel?" ✎":""}</div>
+                  <div style={{fontSize:7,color:isSel?"#fff":"#ffd700",marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textShadow:"0 1px 3px #000"}}>{p?<>{p.nm.split(" ").pop()}{p.youth?<span style={{color:"#d0a030",fontWeight:"bold",marginLeft:1,fontSize:6}}>U21</span>:""}</>:pos}{isSel?" ✎":""}</div>
                   {arrow==="↓"&&<div style={{fontSize:10,color:"rgba(255,255,255,0.5)",lineHeight:1,marginTop:-1}}>↓</div>}
                 </div>;
               })}
@@ -1484,7 +1549,7 @@ export default function RM(){
                 const pid=pt.sub[i];const p=pid&&pt.sq.find(x=>x.id===pid);
                 const isSel=slotSel&&slotSel.type==="sub"&&slotSel.idx===i;
                 return <div key={i} onClick={()=>setSlotSel(isSel?null:{type:"sub",idx:i})} style={{flex:1,background:isSel?"#2a3520":p?"#1a2040":"#0e1220",border:isSel?"1px solid #ffd700":p?"1px solid #2a3060":"1px dashed #252a3a",padding:"3px 2px",textAlign:"center",cursor:"pointer",fontSize:9,color:isSel?"#ffd700":p?"#c0c8e0":"#303848",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                  {p?p.nm.split(" ").pop():"—"}{isSel?" ✎":""}
+                  {p?<>{p.nm.split(" ").pop()}{p.youth?<span style={{color:"#d0a030",fontWeight:"bold",marginLeft:1,fontSize:7}}>U21</span>:""}</>:"—"}{isSel?" ✎":""}
                 </div>;
               })}
             </div>
@@ -1612,7 +1677,7 @@ export default function RM(){
                 return <div key={i} style={{position:"absolute",left:`${x}%`,top:`${y}%`,transform:"translate(-50%,-50%)",textAlign:"center",zIndex:2}}>
                   {arrow==="↑"&&<div style={{fontSize:11,color:"rgba(255,255,255,0.5)",lineHeight:1,marginBottom:-2}}>↑</div>}
                   <div style={{width:24,height:24,borderRadius:99,background:p?(pt.c||["#fff","#fff"])[0]:"rgba(255,255,255,0.2)",border:p?`2px solid ${(pt.c||["#fff","#fff"])[1]}`:"1px dashed rgba(255,255,255,0.4)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:900,color:p?(pt.c||["#000","#fff"])[1]:"rgba(255,255,255,0.5)",margin:"0 auto"}}>{p?p.ovr:pos}</div>
-                  <div style={{fontSize:7,color:"#ffd700",marginTop:1,whiteSpace:"nowrap",textShadow:"0 1px 3px #000"}}>{p?p.nm.split(" ").pop():pos}</div>
+                  <div style={{fontSize:7,color:"#ffd700",marginTop:1,whiteSpace:"nowrap",textShadow:"0 1px 3px #000"}}>{p?<>{p.nm.split(" ").pop()}{p.youth?<span style={{color:"#d0a030",fontWeight:"bold",marginLeft:1,fontSize:6}}>U21</span>:""}</>:pos}</div>
                   {arrow==="↓"&&<div style={{fontSize:11,color:"rgba(255,255,255,0.5)",lineHeight:1,marginTop:-1}}>↓</div>}
                 </div>;})}
             </div>
