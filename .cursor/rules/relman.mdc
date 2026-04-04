@@ -45,6 +45,9 @@ alwaysApply: true
 - Single-file components are fine when small; extract only when there’s clear repetition.
 - **Naming:** Preserve existing abbreviations when editing (e.g. `pt` = player team, `pIdx` = player index, `fix` = fixtures, `wk` = week).
 
+## Agent / workflow
+- **Run commands here** (`npm run dev`, `npm run build`, tests, git, curl checks, etc.) instead of only instructing the user to run them — execute in the workspace terminal when the task needs it.
+
 ## Data and state (technical)
 - Game state lives in `RM`: `teams`, `pIdx`, `wk`, `fix`, `news`, `tab`, training, tactics, etc.
 - **Persistence:** `window.storage` for auto-save and career history; it may be undefined.
