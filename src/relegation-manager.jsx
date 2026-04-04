@@ -472,23 +472,23 @@ function LiveMatch({teams,pIdx,fix,wk,mEv,mH,mA,otherR,onFinish,onTeams}){
   const [subOff,setSubOff]=useState(null);
   const [mTab,setMTab]=useState("match");
   const ref=useRef(null);const iRef=useRef(null);
+  const minRef=useRef(0);
   const mEvRef=useRef(mEv);
   mEvRef.current=mEv;
   const pt=teams[pIdx];const isH=fix[wk]?.find(m=>m.h===pIdx)!=null;
 
   useEffect(()=>{if(ref.current)ref.current.scrollTop=ref.current.scrollHeight;},[disp]);
-  // Do not list mEv in deps — a new array reference (parent re-render) would restart the interval and
-  // duplicate the same minute’s commentary. Always read latest events from mEvRef.
   useEffect(()=>{
     if(paused||ended||htP){if(iRef.current)clearInterval(iRef.current);iRef.current=null;return;}
     const ms={1:1200,2:500,3:150,4:20}[spd]||500;
-    iRef.current=setInterval(()=>{setMin(prev=>{
-      const next=prev+1;
-      if(next>90){setEnded(true);setDisp(d=>[...d,{m:90,ty:"ft",tx:"Full Time!",hl:1}]);return 90;}
+    iRef.current=setInterval(()=>{
+      const next=minRef.current+1;
+      minRef.current=next;
+      setMin(next);
+      if(next>90){setEnded(true);setDisp(d=>[...d,{m:90,ty:"ft",tx:"Full Time!",hl:1}]);return;}
       const me=mEvRef.current.filter(e=>e.m===next);
       if(me.length>0){setDisp(d=>[...d,...me]);me.forEach(e=>{if(e.ty==="goal"&&e.tm==="h")setHG(g=>g+1);if(e.ty==="goal"&&e.tm==="a")setAG(g=>g+1);});if(me.some(e=>e.ty==="ht"))setHtP(true);}
-      return next;
-    });},ms);
+    },ms);
     return ()=>{if(iRef.current)clearInterval(iRef.current);};
   },[paused,ended,spd,htP]);
 
@@ -652,15 +652,17 @@ function LiveMatch({teams,pIdx,fix,wk,mEv,mH,mA,otherR,onFinish,onTeams}){
   );
 }
 
-// Strip outer quotes from model text so we don’t double-wrap with \u201c \u201d in News.
 function trimPressQuoteOuter(s){
-  let t=String(s||"").trim();
-  for(let i=0;i<6;i++){
-    const u=t.replace(/^[\u201c\u201e"]+/,"").replace(/[\u201d"]+$/,"").trim();
-    if(u===t)break;
-    t=u;
-  }
+  if(typeof s!=="string")return"";
+  let t=s.trim();
+  if((t.startsWith('"')&&t.endsWith('"'))||(t.startsWith("\u201c")&&t.endsWith("\u201d")))t=t.slice(1,-1).trim();
   return t;
+}
+function appendPressNews(prev,{headline,quote,ok,detail,week,token}){
+  const body=trimPressQuoteOuter(quote)||quote;
+  const detailBlock=!ok&&detail?`\n\n(${detail})`:"";
+  const row={w:week,fr:"Media",su:headline,bo:`\u201c${body}\u201d${detailBlock}`,_press:token,pc:1};
+  return [...prev.filter(n=>n._press!==token),row];
 }
 
 // ── MAIN ──────────────────────────────────────────────────
@@ -691,12 +693,10 @@ export default function RM(){
   const [endTab,setEndTab]=useState("news");
   const gamesRef=useRef(null);
   const nextGameRef=useRef(null);
-  /** After a match, re-run autoSave when the async press quote is appended to news. */
-  const pressSaveRef=useRef(null);
-  const pressNonceRef=useRef(0);
+  const pressCtxRef=useRef(null);
   const [streak,setStreak]=useState(0);
   const [training,setTraining]=useState("Fitness");
-  /** { headline, data, week, token } while Azure quote is loading; token matches News stub row _press. */
+  /** Post-match press: in-flight Foundry fetch; on success updates News (see appendPressNews). */
   const [pressPending,setPressPending]=useState(null);
 
   // Load career history from persistent storage on mount
@@ -707,41 +707,33 @@ export default function RM(){
 
   useEffect(()=>{
     if(!pressPending)return;
-    const {data,headline,week,token}=pressPending;
+    const{data,headline,week,token}=pressPending;
     let cancelled=false;
-    const appendPressNews=(r,errDetail)=>{
-      const raw=r?.quote||"It's been a long day — we'll speak again at the next match.";
-      const quote=trimPressQuoteOuter(raw);
-      const bo=errDetail?`\u201c${quote}\u201d\n\n\u2014 ${errDetail}`:r&&r.ok?`\u201c${quote}\u201d`:`\u201c${quote}\u201d${r&&r.detail?`\n\n\u2014 ${r.detail}`:""}`;
-      const row={w:week,fr:"Media",su:`Press conference post result — ${headline}`,bo,pc:1};
-      setNews(prev=>{
-        const idx=token!=null?prev.findIndex(n=>n._press===token):-1;
-        const next=idx>=0?(()=>{const cp=[...prev];cp[idx]=row;return cp;})():[...prev,row];
-        const p=pressSaveRef.current;
-        if(p){
-          try{
-            void autoSave(p.nt,p.fix,p.wk,next,p.pIdx,p.league,p.trainHist,p.training,p.streak,p.teamTalk,p.mustWinCount);
-          }catch(_){/* ignore */}
-          pressSaveRef.current=null;
-        }
-        return next;
-      });
-      setTab("news");
-    };
-    // No AbortController cleanup: aborting raced the .then in Strict Mode and skipped appending entirely.
     fetchPressConferenceQuote(data)
       .then(r=>{
         if(cancelled)return;
+        const c=pressCtxRef.current;
+        setNews(prev=>{
+          const next=appendPressNews(prev,{headline,quote:r.quote,ok:r.ok,detail:r.detail||"",week,token});
+          if(c)autoSave(c.nt,c.fix,c.wk,next,c.pIdx,league,c.th,c.training,c.streak,c.teamTalk,c.mwc);
+          return next;
+        });
         setPressPending(null);
-        appendPressNews(r);
+        setTab("news");
       })
       .catch(e=>{
         if(cancelled)return;
+        const c=pressCtxRef.current;
+        setNews(prev=>{
+          const next=appendPressNews(prev,{headline,quote:"It's been a long day — we'll speak again at the next match.",ok:false,detail:String(e?.message||e),week,token});
+          if(c)autoSave(c.nt,c.fix,c.wk,next,c.pIdx,league,c.th,c.training,c.streak,c.teamTalk,c.mwc);
+          return next;
+        });
         setPressPending(null);
-        appendPressNews(null,String(e?.message||e));
+        setTab("news");
       });
     return()=>{cancelled=true;};
-  },[pressPending]);
+  },[pressPending,league]);
 
   async function saveCareer(entry){
     const updated=[...careerHistory,entry];
@@ -774,7 +766,7 @@ export default function RM(){
       setLeague(s.league);setTeams(s.teams);setFix(s.fix);setWk(s.wk);setNews(s.news||[]);setPIdx(s.pIdx);
       setTrainHist(s.trainHist||[]);setTraining(s.training||"Fitness");setStreak(s.streak||0);
       setTeamTalk(s.teamTalk||null);setMustWinCount(s.mustWinCount||0);
-      setTList(mkTL());setTab("squad");setScr("game");setPressPending(null);pressSaveRef.current=null;
+      setTList(mkTL());setTab("squad");setScr("game");setPressPending(null);pressCtxRef.current=null;
     }}catch(e){console.error(e);}})();
   }
 
@@ -805,7 +797,7 @@ export default function RM(){
   function startGame(idx){
     const world=applyPlayerChoice(preWorld,idx);
     setTeams(world.teams);setPIdx(idx);setFix(world.fix);setWk(world.startWk);
-    setTab("squad");setStreak(0);setSel(null);setLast(null);setTraining("Fitness");setTrainHist([]);setMustWinCount(0);setTeamTalk(null);setPressPending(null);pressSaveRef.current=null;
+    setTab("squad");setStreak(0);setSel(null);setLast(null);setTraining("Fitness");setTrainHist([]);setMustWinCount(0);setTeamTalk(null);setPressPending(null);pressCtxRef.current=null;
     const pt=world.teams[idx];
     const s=[...world.teams].sort((a,b)=>b.pts-a.pts||(b.gf-b.ga)-(a.gf-a.ga));
     const pos=s.indexOf(pt)+1;
@@ -861,7 +853,7 @@ export default function RM(){
   }
 
   function startLive(){
-    setPressPending(null);pressSaveRef.current=null;
+    setPressPending(null);pressCtxRef.current=null;
     if(wk>=38){endSeason();return;}
     const round=fix[wk];const pm=round.find(m=>m.h===pIdx||m.a===pIdx);if(!pm)return;
     const nt=teams.map(t=>({...t,sq:t.sq.map(p=>({...p,at:{...p.at}}))}));
@@ -1023,20 +1015,22 @@ export default function RM(){
       };
     }
 
+    const mediaToken=pcData?`pc-${nextWk}-${Date.now()}`:null;
     let finalNews=newNews;
-    if(pcData){
-      const tok=++pressNonceRef.current;
-      const hl=`${home.nm} ${hg} - ${ag} ${away.nm}`;
-      pressSaveRef.current={nt,fix,wk:nextWk,pIdx,league,trainHist,training,streak:newStreak,teamTalk,mustWinCount};
-      setPressPending({headline:hl,data:pcData,week:nextWk,token:tok});
-      finalNews=[...newNews,{w:nextWk,fr:"Media",su:`Press conference post result — ${hl}`,bo:"Speaking to the press…",pc:1,_press:tok}];
-    }else{
-      setPressPending(null);pressSaveRef.current=null;
+    if(mediaToken){
+      finalNews=[...newNews,{
+        w:nextWk,
+        fr:"Media",
+        su:`${home.nm} ${hg} - ${ag} ${away.nm}`,
+        bo:"Press conference quote loading…",
+        _press:mediaToken,
+        pc:1,
+      }];
     }
 
     setTeams(nt);setLast({h:home.nm,a:away.nm,hg,ag});setWk(nextWk);setMM(false);setNews(finalNews);
     if(board.sacked){
-      setPressPending(null);pressSaveRef.current=null;
+      setPressPending(null);pressCtxRef.current=null;
       clearSave();
       const myGames=fix.slice(19,nextWk).map(rd=>rd.find(m=>m.h===pIdx||m.a===pIdx)).filter(m=>m&&m.done);
       let sW=0,sD=0,sL=0,sGF=0,sGA=0;
@@ -1046,10 +1040,23 @@ export default function RM(){
       saveCareer({league,team:nt[pIdx].nm,teamColors:nt[pIdx].c||["#ccc","#fff"],outcome:"sacked",finalPos:sPos,pts:nt[pIdx].pts,w:sW,d:sD,l:sL,gf:sGF,ga:sGA,playerOfSeason:null,topScorer:null,bestSigning:null,date:new Date().toISOString().slice(0,10)});
       setScr("sacked");return;
     }
-    if(nextWk>=38){setPressPending(null);pressSaveRef.current=null;clearSave();endSeason();return;}
-    // Auto-save after each match (includes press stub row when pcData)
+    if(nextWk>=38){setPressPending(null);pressCtxRef.current=null;clearSave();endSeason();return;}
+    if(pcData&&mediaToken){
+      pressCtxRef.current={
+        nt,fix,wk:nextWk,pIdx,league,th:trainHist,training,streak:newStreak,teamTalk,mwc:mustWinCount,
+      };
+      setPressPending({
+        headline:`${home.nm} ${hg} - ${ag} ${away.nm}`,
+        data:pcData,
+        week:nextWk,
+        token:mediaToken,
+      });
+    }else{
+      setPressPending(null);
+      pressCtxRef.current=null;
+    }
     autoSave(nt,fix,nextWk,finalNews,pIdx,league,trainHist,training,newStreak,teamTalk,mustWinCount);
-    if(board.msgs.length>0||pcData)setTab("news");
+    if(board.msgs.length>0)setTab("news");
   }
 
   function endSeason(){
@@ -1332,9 +1339,9 @@ export default function RM(){
       </div>
       <div className="cm-panel" style={{margin:2,flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         {endTab==="news"?<div className="cm-sunken" style={{margin:4,flex:1,overflowY:"auto"}}>
-          {[...news].reverse().map((n,i)=> <div key={i} style={{padding:n.fr?"6px":"3px 6px",borderBottom:"1px solid #1e2540",fontSize:10,borderLeft:n.pc?"3px solid #ffd700":"none",paddingLeft:n.pc?7:undefined}}>
+          {[...news].reverse().map((n,i)=> <div key={i} style={{padding:n.fr?"6px":"3px 6px",borderBottom:"1px solid #1e2540",fontSize:10}}>
             <span style={{color:"#506080",marginRight:6}}>Wk{n.w}</span>
-            {n.fr?<><span style={{color:"#6090e0",fontWeight:"bold"}}>{n.fr}: </span><span style={{color:"#ffd700"}}>{n.su}</span><div style={{color:"#8090b0",marginTop:2,paddingLeft:2,whiteSpace:"pre-wrap"}}>{n.bo}</div></>
+            {n.fr?<><span style={{color:"#6090e0",fontWeight:"bold"}}>{n.fr}: </span><span style={{color:"#ffd700"}}>{n.su}</span><div style={{color:"#8090b0",marginTop:2,paddingLeft:2}}>{n.bo}</div></>
             :<span>{n.tx}</span>}
           </div>)}
         </div>
@@ -1861,7 +1868,12 @@ export default function RM(){
           </div></div>}
 
           {tab==="news"&&<div style={{flex:1,overflowY:"auto"}}><div className="cm-sunken" style={{margin:4}}>
-            {[...news].reverse().map((n,i)=> <div key={i} style={{padding:n.fr?"6px":"3px 6px",borderBottom:"1px solid #1e2540",fontSize:10,borderLeft:n.pc?"3px solid #ffd700":"none",paddingLeft:n.pc?7:undefined}}>
+            {[...news].reverse().map((n,i)=> <div key={i} style={{
+              padding:n.fr?"6px":"3px 6px",
+              borderBottom:"1px solid #1e2540",
+              fontSize:10,
+              ...(n.pc?{borderLeft:"3px solid #ffd700",paddingLeft:8}:{})
+            }}>
               <span style={{color:"#506080",marginRight:6}}>Wk{n.w}</span>
               {n.fr?<><span style={{color:"#6090e0",fontWeight:"bold"}}>{n.fr}: </span><span style={{color:"#ffd700"}}>{n.su}</span><div style={{color:"#8090b0",marginTop:2,paddingLeft:2,whiteSpace:"pre-wrap"}}>{n.bo}</div></>
               :<span>{n.tx}</span>}

@@ -135,7 +135,7 @@ export async function fetchPressConferenceQuote(matchData, options = {}) {
       { role: "system", content: SYSTEM },
       { role: "user", content: buildUserPrompt(matchData) },
     ],
-    max_tokens: 256,
+    max_tokens: 1024,
     temperature: 0.9,
   });
 
