@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { generatePressConference } from "./press-conference.js";
+import { fetchPressConferenceQuote } from "./press-conference.js";
 
 // ── DATA ──────────────────────────────────────────────────
 const FN=["James","David","Michael","Chris","Daniel","Mark","Steve","Paul","Andrew","Tom","Ben","Sam","Jack","Ryan","Luke","Matt","Nathan","Scott","Gary","Lee","Wayne","Rio","Frank","John","Peter","Alan","Ian","Rob","Simon","Tony","Phil","Kevin","Nigel","Stuart","Craig","Darren","Jamie","Dean","Colin","Neil","Gareth","Owen","Aaron","Adam","Callum","Ethan","Liam","Noah","Oliver","Harry","George","Charlie","Leo","Alfie","Freddie","Oscar","Archie","Arthur","Henry","Jacob","Thomas","Joshua","William","Max","Theo","Finley","Sebastian","Elliot","Riley","Hugo","Louie","Toby","Reuben","Jude","Edward","Kai","Logan","Harvey","Harrison","Dylan","Elijah","Isaac","Tyler","Lucas","Jayden","Connor","Zack","Aiden","Blake","Kyle","Rhys","Caleb","Joel","Ellis","Evan","Rowan","Felix","Jesse","Troy","Miles","Rex","Finn","Cole","Noel","Ross","Kirk","Drew","Brent","Wade","Clay","Vince","Grant","Floyd","Lance","Clint","Hank","Chad","Seth","Kurt","Bart","Carl","Glen","Dale","Earl"];
@@ -678,8 +678,9 @@ export default function RM(){
   const nextGameRef=useRef(null);
   const [streak,setStreak]=useState(0);
   const [training,setTraining]=useState("Fitness");
-  /** Post-match press conference: filled when returning from LiveMatch after finishMatch. */
-  const [postMatchPC,setPostMatchPC]=useState(null);
+  /** Post-match press: pending = in-flight fetch; result = headline + quote (+ detail if fallback). */
+  const [pressPending,setPressPending]=useState(null);
+  const [pressResult,setPressResult]=useState(null);
 
   // Load career history from persistent storage on mount
   useEffect(()=>{
@@ -688,18 +689,22 @@ export default function RM(){
   },[]);
 
   useEffect(()=>{
-    if(!postMatchPC?.loading||!postMatchPC?.data)return;
-    const snap=postMatchPC.data;
-    let off=false;
-    generatePressConference(snap).then(r=>{
-      if(off)return;
-      setPostMatchPC(p=>{
-        if(!p||!p.loading||p.data!==snap)return p;
-        return {...p,loading:false,quote:r.quote,usedOffline:!r.fromApi};
+    if(!pressPending)return;
+    const {data,headline}=pressPending;
+    const ac=new AbortController();
+    fetchPressConferenceQuote(data,{signal:ac.signal})
+      .then(r=>{
+        if(ac.signal.aborted)return;
+        setPressPending(null);
+        setPressResult({headline,ok:r.ok,quote:r.quote,detail:r.detail||""});
+      })
+      .catch(e=>{
+        if(e?.name==="AbortError")return;
+        setPressPending(null);
+        setPressResult({headline,ok:false,quote:"It's been a long day — we'll speak again at the next match.",detail:String(e?.message||e)});
       });
-    });
-    return()=>{off=true;};
-  },[postMatchPC]);
+    return()=>ac.abort();
+  },[pressPending]);
 
   async function saveCareer(entry){
     const updated=[...careerHistory,entry];
@@ -732,7 +737,7 @@ export default function RM(){
       setLeague(s.league);setTeams(s.teams);setFix(s.fix);setWk(s.wk);setNews(s.news||[]);setPIdx(s.pIdx);
       setTrainHist(s.trainHist||[]);setTraining(s.training||"Fitness");setStreak(s.streak||0);
       setTeamTalk(s.teamTalk||null);setMustWinCount(s.mustWinCount||0);
-      setTList(mkTL());setTab("squad");setScr("game");setPostMatchPC(null);
+      setTList(mkTL());setTab("squad");setScr("game");setPressPending(null);setPressResult(null);
     }}catch(e){console.error(e);}})();
   }
 
@@ -763,7 +768,7 @@ export default function RM(){
   function startGame(idx){
     const world=applyPlayerChoice(preWorld,idx);
     setTeams(world.teams);setPIdx(idx);setFix(world.fix);setWk(world.startWk);
-    setTab("squad");setStreak(0);setSel(null);setLast(null);setTraining("Fitness");setTrainHist([]);setMustWinCount(0);setTeamTalk(null);setPostMatchPC(null);
+    setTab("squad");setStreak(0);setSel(null);setLast(null);setTraining("Fitness");setTrainHist([]);setMustWinCount(0);setTeamTalk(null);setPressPending(null);setPressResult(null);
     const pt=world.teams[idx];
     const s=[...world.teams].sort((a,b)=>b.pts-a.pts||(b.gf-b.ga)-(a.gf-a.ga));
     const pos=s.indexOf(pt)+1;
@@ -819,7 +824,7 @@ export default function RM(){
   }
 
   function startLive(){
-    setPostMatchPC(null);
+    setPressPending(null);setPressResult(null);
     if(wk>=38){endSeason();return;}
     const round=fix[wk];const pm=round.find(m=>m.h===pIdx||m.a===pIdx);if(!pm)return;
     const nt=teams.map(t=>({...t,sq:t.sq.map(p=>({...p,at:{...p.at}}))}));
@@ -983,7 +988,7 @@ export default function RM(){
 
     setTeams(nt);setLast({h:home.nm,a:away.nm,hg,ag});setWk(nextWk);setMM(false);setNews(newNews);
     if(board.sacked){
-      setPostMatchPC(null);
+      setPressPending(null);setPressResult(null);
       clearSave();
       const myGames=fix.slice(19,nextWk).map(rd=>rd.find(m=>m.h===pIdx||m.a===pIdx)).filter(m=>m&&m.done);
       let sW=0,sD=0,sL=0,sGF=0,sGA=0;
@@ -993,9 +998,13 @@ export default function RM(){
       saveCareer({league,team:nt[pIdx].nm,teamColors:nt[pIdx].c||["#ccc","#fff"],outcome:"sacked",finalPos:sPos,pts:nt[pIdx].pts,w:sW,d:sD,l:sL,gf:sGF,ga:sGA,playerOfSeason:null,topScorer:null,bestSigning:null,date:new Date().toISOString().slice(0,10)});
       setScr("sacked");return;
     }
-    if(nextWk>=38){setPostMatchPC(null);clearSave();endSeason();return;}
-    if(pcData)setPostMatchPC({loading:true,quote:null,headline:`${home.nm} ${hg} - ${ag} ${away.nm}`,usedOffline:false,data:pcData});
-    else setPostMatchPC(null);
+    if(nextWk>=38){setPressPending(null);setPressResult(null);clearSave();endSeason();return;}
+    if(pcData){
+      setPressResult(null);
+      setPressPending({headline:`${home.nm} ${hg} - ${ag} ${away.nm}`,data:pcData});
+    }else{
+      setPressPending(null);setPressResult(null);
+    }
     // Auto-save after each match
     autoSave(nt,fix,nextWk,newNews,pIdx,league,newTrainHist,training,newStreak,teamTalk,mustWinCount);
     if(board.msgs.length>0)setTab("news");
@@ -1478,17 +1487,17 @@ export default function RM(){
         </div>
         <button className="cm-btn green" onClick={()=>{setTeamTalk(null);setTalkScreen(true);}} style={{fontWeight:"bold"}}>▶ Continue</button>
       </div>
-      {postMatchPC&&(
+      {(pressPending||pressResult)&&(
         <div className="cm-panel" style={{margin:"2px 2px 0",border:"1px solid #2a3050"}}>
           <div className="cm-title" style={{padding:"4px 8px"}}>POST-MATCH PRESS CONFERENCE</div>
           <div className="cm-sunken" style={{margin:2,padding:8}}>
-            <div style={{fontSize:10,color:"#8090b0",marginBottom:6}}>{postMatchPC.headline}</div>
-            {postMatchPC.loading&&<div style={{fontStyle:"italic",color:"#ffd700"}}>Manager is speaking to the press...</div>}
-            {!postMatchPC.loading&&postMatchPC.quote&&<div style={{color:"#c0c8e0",lineHeight:1.5,fontSize:11,whiteSpace:"pre-wrap"}}>&ldquo;{postMatchPC.quote}&rdquo;</div>}
-            {postMatchPC.usedOffline&&!postMatchPC.loading&&<div style={{fontSize:9,color:"#506080",marginTop:6}}>Local press notes (API unavailable)</div>}
+            <div style={{fontSize:10,color:"#8090b0",marginBottom:6}}>{pressPending?.headline||pressResult?.headline}</div>
+            {pressPending&&<div style={{fontStyle:"italic",color:"#ffd700"}}>Manager is speaking to the press...</div>}
+            {pressResult&&<div style={{color:"#c0c8e0",lineHeight:1.5,fontSize:11,whiteSpace:"pre-wrap"}}>&ldquo;{pressResult.quote}&rdquo;</div>}
+            {pressResult&&!pressResult.ok&&pressResult.detail&&<div style={{fontSize:9,color:"#a08060",marginTop:8,lineHeight:1.4,whiteSpace:"pre-wrap"}}>{pressResult.detail}</div>}
           </div>
           <div style={{padding:"4px 8px",display:"flex",justifyContent:"flex-end",borderTop:"1px solid #2a3050"}}>
-            <button type="button" className="cm-btn" onClick={()=>setPostMatchPC(null)} style={{fontSize:10}}>Dismiss</button>
+            <button type="button" className="cm-btn" onClick={()=>{setPressPending(null);setPressResult(null);}} style={{fontSize:10}}>Dismiss</button>
           </div>
         </div>
       )}

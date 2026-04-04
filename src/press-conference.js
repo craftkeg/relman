@@ -1,54 +1,30 @@
-// Press conference — Azure OpenAI / AI Foundry (chat completions).
-// Set VITE_AZURE_FOUNDRY_* in .env.local (see comments at bottom). Never commit API keys.
-
-const PRESS_SYSTEM_PROMPT = `You are a football manager giving a post-match press conference. Speak in short, punchy quotes like a real Championship Manager press conference. 2-3 sentences max. Never break character. Vary your tone based on the result and context — frustrated after losses, cautiously optimistic after draws, proud after big wins. Reference specific match events when mentioned.`;
-
-function foundryConfig() {
-  const endpoint = (import.meta.env.VITE_AZURE_FOUNDRY_ENDPOINT || "").replace(/\/$/, "");
-  const deployment = import.meta.env.VITE_AZURE_FOUNDRY_DEPLOYMENT || "gpt-oss-120b";
-  const apiKey = import.meta.env.VITE_AZURE_FOUNDRY_API_KEY || "";
-  const apiVersion = import.meta.env.VITE_AZURE_FOUNDRY_API_VERSION || "2024-12-01-preview";
-  return { endpoint, deployment, apiKey, apiVersion };
-}
-
-/** @returns {{ quote: string, fromApi: boolean }} */
-export function getFallbackQuote(matchData) {
-  const fallbacks = {
-    won: [
-      "The lads were magnificent today. That's the kind of performance that keeps us up.",
-      "Three points, clean sheet mentality. I couldn't ask for more.",
-      "We executed the game plan perfectly. Full credit to the players.",
-    ],
-    lost: [
-      "I'm not going to make excuses. We weren't good enough today, simple as that.",
-      "Disappointing. We need to have a long hard look at ourselves before Saturday.",
-      "The goals we conceded were schoolboy stuff. We have to be better.",
-    ],
-    drew: [
-      "A point away from home, I'll take that. We showed character to hang in there.",
-      "Mixed feelings. We had chances to win it but at least we didn't lose.",
-      "It's a fair result. Neither side did enough to win the game.",
-    ],
-  };
-  const quotes = fallbacks[matchData.result] || fallbacks.drew;
-  const quote = quotes[Math.floor(Math.random() * quotes.length)];
-  return { quote, fromApi: false };
-}
-
 /**
- * @param {object} matchData
- * @param {"won"|"lost"|"drew"} matchData.result
- * @param {string} matchData.score e.g. "2-1" (your goals first)
- * @param {"at home"|"away"} matchData.venue
- * @param {string} matchData.opponent
- * @param {string} [matchData.goals]
- * @param {string} matchData.morale
- * @param {string} matchData.position e.g. "21st"
- * @param {string} [matchData.extra]
- * @returns {Promise<{ quote: string, fromApi: boolean }>}
+ * Post-match press quotes via Azure OpenAI / AI Foundry (chat completions).
+ *
+ * Flow:
+ * 1. `npm run dev` + `.env.local` → browser calls `/api/azure-foundry/...` (Vite proxies to Azure, adds api-key).
+ * 2. Production static build (e.g. GitHub Pages) → same path usually 404s; use dev or host a real proxy.
+ *
+ * Env (.env.local, restart dev server):
+ *   VITE_AZURE_FOUNDRY_ENDPOINT=https://YOUR-RESOURCE.cognitiveservices.azure.com
+ *   VITE_AZURE_FOUNDRY_API_KEY=...
+ *   VITE_AZURE_FOUNDRY_DEPLOYMENT=gpt-oss-120b
+ *   VITE_AZURE_FOUNDRY_API_VERSION=2024-12-01-preview   (optional)
  */
-export async function generatePressConference(matchData) {
-  const prompt = [
+
+const SYSTEM = `You are a football manager giving a post-match press conference. Speak in short, punchy quotes like a real Championship Manager press conference. 2-3 sentences max. Never break character. Vary your tone based on the result and context — frustrated after losses, cautiously optimistic after draws, proud after big wins. Reference specific match events when mentioned.`;
+
+function readConfig() {
+  return {
+    endpoint: (import.meta.env.VITE_AZURE_FOUNDRY_ENDPOINT || "").replace(/\/$/, ""),
+    apiKey: import.meta.env.VITE_AZURE_FOUNDRY_API_KEY || "",
+    deployment: import.meta.env.VITE_AZURE_FOUNDRY_DEPLOYMENT || "gpt-oss-120b",
+    apiVersion: import.meta.env.VITE_AZURE_FOUNDRY_API_VERSION || "2024-12-01-preview",
+  };
+}
+
+function buildUserPrompt(matchData) {
+  return [
     `We ${matchData.result} ${matchData.score} ${matchData.venue} to ${matchData.opponent}.`,
     matchData.goals ? `Goals: ${matchData.goals}.` : "",
     `Team morale is ${matchData.morale}.`,
@@ -57,62 +33,96 @@ export async function generatePressConference(matchData) {
   ]
     .filter(Boolean)
     .join(" ");
+}
 
-  const { endpoint, deployment, apiKey, apiVersion } = foundryConfig();
+const OFFLINE = {
+  won: [
+    "The lads were magnificent today. That's the kind of performance that keeps us up.",
+    "Three points, clean sheet mentality. I couldn't ask for more.",
+    "We executed the game plan perfectly. Full credit to the players.",
+  ],
+  lost: [
+    "I'm not going to make excuses. We weren't good enough today, simple as that.",
+    "Disappointing. We need to have a long hard look at ourselves before Saturday.",
+    "The goals we conceded were schoolboy stuff. We have to be better.",
+  ],
+  drew: [
+    "A point away from home, I'll take that. We showed character to hang in there.",
+    "Mixed feelings. We had chances to win it but at least we didn't lose.",
+    "It's a fair result. Neither side did enough to win the game.",
+  ],
+};
+
+function offlineQuote(matchData) {
+  const list = OFFLINE[matchData.result] || OFFLINE.drew;
+  const quote = list[Math.floor(Math.random() * list.length)];
+  return quote;
+}
+
+/**
+ * @returns {{ ok: false, quote: string, detail: string } | { ok: true, quote: string }}
+ */
+export async function fetchPressConferenceQuote(matchData, options = {}) {
+  const { signal } = options;
+  const { endpoint, apiKey, deployment, apiVersion } = readConfig();
+
   if (!endpoint || !apiKey) {
-    if (import.meta.env.DEV) {
-      console.warn(
-        "[press-conference] Add VITE_AZURE_FOUNDRY_ENDPOINT and VITE_AZURE_FOUNDRY_API_KEY to .env.local (restart npm run dev)."
-      );
-    }
-    return getFallbackQuote(matchData);
+    const detail = import.meta.env.DEV
+      ? "No Azure config: add VITE_AZURE_FOUNDRY_ENDPOINT and VITE_AZURE_FOUNDRY_API_KEY to .env.local, then restart npm run dev."
+      : "No Azure config in this build (expected for static hosting without env injection).";
+    return { ok: false, quote: offlineQuote(matchData), detail };
   }
 
-  const path = `/openai/deployments/${deployment}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`;
-  // Dev: same-origin proxy (see vite.config.js) so Azure CORS does not block the browser.
+  const path = `/openai/deployments/${encodeURIComponent(deployment)}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`;
   const url = import.meta.env.DEV ? `/api/azure-foundry${path}` : `${endpoint}${path}`;
   const headers = { "Content-Type": "application/json" };
   if (!import.meta.env.DEV) headers["api-key"] = apiKey;
 
+  const body = JSON.stringify({
+    messages: [
+      { role: "system", content: SYSTEM },
+      { role: "user", content: buildUserPrompt(matchData) },
+    ],
+    max_tokens: 120,
+    temperature: 0.9,
+  });
+
   try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        messages: [
-          { role: "system", content: PRESS_SYSTEM_PROMPT },
-          { role: "user", content: prompt },
-        ],
-        max_tokens: 120,
-        temperature: 0.9,
-      }),
-    });
+    const response = await fetch(url, { method: "POST", headers, body, signal });
 
     if (!response.ok) {
-      const errBody = await response.text();
-      console.error("[press-conference] Foundry API error:", response.status, errBody.slice(0, 400));
-      return getFallbackQuote(matchData);
+      const snippet = (await response.text()).slice(0, 280);
+      const detail = `HTTP ${response.status}${snippet ? ` — ${snippet}` : ""}`;
+      return { ok: false, quote: offlineQuote(matchData), detail };
     }
 
     const data = await response.json();
     const text = data.choices?.[0]?.message?.content?.trim();
-    if (!text) return getFallbackQuote(matchData);
-    return { quote: text, fromApi: true };
+    if (!text) {
+      return {
+        ok: false,
+        quote: offlineQuote(matchData),
+        detail: "Model returned no text (check deployment and response format).",
+      };
+    }
+    return { ok: true, quote: text };
   } catch (err) {
-    console.error("Press conference error:", err);
-    return getFallbackQuote(matchData);
+    if (err?.name === "AbortError") throw err;
+    const detail =
+      import.meta.env.PROD
+        ? `Request failed (${err?.message || err}). A static site cannot reach Azure from the browser (CORS / no proxy). Use npm run dev with .env.local, or deploy a small API proxy.`
+        : `Request failed (${err?.message || err}). Check dev server is running and vite.config proxy matches your endpoint.`;
+    console.error("[press-conference]", detail);
+    return { ok: false, quote: offlineQuote(matchData), detail };
   }
 }
 
-/*
-  .env.local (not committed; *.local is gitignored):
+/** @deprecated use fetchPressConferenceQuote */
+export async function generatePressConference(matchData) {
+  const r = await fetchPressConferenceQuote(matchData);
+  return { quote: r.quote, fromApi: r.ok };
+}
 
-  VITE_AZURE_FOUNDRY_ENDPOINT=https://YOUR-RESOURCE.cognitiveservices.azure.com
-  VITE_AZURE_FOUNDRY_DEPLOYMENT=gpt-oss-120b
-  VITE_AZURE_FOUNDRY_API_KEY=your-key-here
-  # optional:
-  # VITE_AZURE_FOUNDRY_API_VERSION=2024-12-01-preview
-
-  npm run dev: requests go to /api/azure-foundry (Vite proxy) so the browser is not blocked by CORS.
-  npm run build + static host: you need a small serverless proxy unless Azure allows your site origin.
-*/
+export function getFallbackQuote(matchData) {
+  return { quote: offlineQuote(matchData), fromApi: false };
+}
