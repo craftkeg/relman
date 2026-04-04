@@ -13,7 +13,7 @@ function azureFoundryProxy(env) {
       rewrite: (path) => path.replace(/^\/api\/azure-foundry/, ""),
       configure: (proxy) => {
         proxy.on("proxyReq", (proxyReq) => {
-          const key = env.VITE_AZURE_FOUNDRY_API_KEY;
+          const key = env.AZURE_FOUNDRY_API_KEY || env.VITE_AZURE_FOUNDRY_API_KEY;
           if (key) proxyReq.setHeader("api-key", key);
         });
       },

@@ -7,7 +7,8 @@
  *
  * Env (.env.local, restart dev server):
  *   VITE_AZURE_FOUNDRY_ENDPOINT=https://YOUR-RESOURCE.cognitiveservices.azure.com
- *   VITE_AZURE_FOUNDRY_API_KEY=...
+ *   AZURE_FOUNDRY_API_KEY=...   (recommended: not bundled into the browser; Vite proxy injects it)
+ *   Or: VITE_AZURE_FOUNDRY_API_KEY=...   (works in dev; avoid for production builds)
  *   VITE_AZURE_FOUNDRY_DEPLOYMENT=gpt-oss-120b
  *   VITE_AZURE_FOUNDRY_API_VERSION=2024-12-01-preview   (optional)
  */
@@ -66,11 +67,23 @@ export async function fetchPressConferenceQuote(matchData, options = {}) {
   const { signal } = options;
   const { endpoint, apiKey, deployment, apiVersion } = readConfig();
 
-  if (!endpoint || !apiKey) {
-    const detail = import.meta.env.DEV
-      ? "No Azure config: add VITE_AZURE_FOUNDRY_ENDPOINT and VITE_AZURE_FOUNDRY_API_KEY to .env.local, then restart npm run dev."
-      : "No Azure config in this build (expected for static hosting without env injection).";
-    return { ok: false, quote: offlineQuote(matchData), detail };
+  // Dev: only the endpoint must be in VITE_* (browser). The proxy adds api-key from AZURE_FOUNDRY_API_KEY or VITE_* in .env.local (never log the key).
+  if (import.meta.env.DEV) {
+    if (!endpoint) {
+      return {
+        ok: false,
+        quote: offlineQuote(matchData),
+        detail:
+          "Add VITE_AZURE_FOUNDRY_ENDPOINT to .env.local (and AZURE_FOUNDRY_API_KEY for the proxy), then restart npm run dev.",
+      };
+    }
+  } else if (!endpoint || !apiKey) {
+    return {
+      ok: false,
+      quote: offlineQuote(matchData),
+      detail:
+        "No Azure config in this build (static hosting needs a proxy or injected env with endpoint + key).",
+    };
   }
 
   const path = `/openai/deployments/${encodeURIComponent(deployment)}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`;
