@@ -472,21 +472,25 @@ function LiveMatch({teams,pIdx,fix,wk,mEv,mH,mA,otherR,onFinish,onTeams}){
   const [subOff,setSubOff]=useState(null);
   const [mTab,setMTab]=useState("match");
   const ref=useRef(null);const iRef=useRef(null);
+  const mEvRef=useRef(mEv);
+  mEvRef.current=mEv;
   const pt=teams[pIdx];const isH=fix[wk]?.find(m=>m.h===pIdx)!=null;
 
   useEffect(()=>{if(ref.current)ref.current.scrollTop=ref.current.scrollHeight;},[disp]);
+  // Do not list mEv in deps — a new array reference (parent re-render) would restart the interval and
+  // duplicate the same minute’s commentary. Always read latest events from mEvRef.
   useEffect(()=>{
     if(paused||ended||htP){if(iRef.current)clearInterval(iRef.current);iRef.current=null;return;}
     const ms={1:1200,2:500,3:150,4:20}[spd]||500;
     iRef.current=setInterval(()=>{setMin(prev=>{
       const next=prev+1;
       if(next>90){setEnded(true);setDisp(d=>[...d,{m:90,ty:"ft",tx:"Full Time!",hl:1}]);return 90;}
-      const me=mEv.filter(e=>e.m===next);
+      const me=mEvRef.current.filter(e=>e.m===next);
       if(me.length>0){setDisp(d=>[...d,...me]);me.forEach(e=>{if(e.ty==="goal"&&e.tm==="h")setHG(g=>g+1);if(e.ty==="goal"&&e.tm==="a")setAG(g=>g+1);});if(me.some(e=>e.ty==="ht"))setHtP(true);}
       return next;
     });},ms);
     return ()=>{if(iRef.current)clearInterval(iRef.current);};
-  },[paused,ended,spd,mEv,htP]);
+  },[paused,ended,spd,htP]);
 
   const doSub=(offId,onId)=>{if(subs>=3)return;const nt=teams.map((t,i)=>i===pIdx?{...t,xi:t.xi.map(x=>x===offId?onId:x),sub:t.sub.filter(x=>x!==onId)}:t);const off=pt.sq.find(p=>p.id===offId),on=pt.sq.find(p=>p.id===onId);onTeams(nt);setSubs(s=>s+1);setDisp(d=>[...d,{m:min,ty:"sub",tx:`SUB: ${on?.nm} ON for ${off?.nm}`,hl:1}]);setSubOff(null);setMTab("match");};
   const chgTac=t=>{onTeams(teams.map((x,i)=>i===pIdx?{...x,tac:t}:x));setDisp(d=>[...d,{m:min,ty:"com",tx:`Tactic changed to ${t}`,hl:1}]);};
