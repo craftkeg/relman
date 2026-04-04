@@ -60,6 +60,45 @@ function offlineQuote(matchData) {
   return quote;
 }
 
+/** Azure / some reasoning models vary: string content, content[], legacy .text, or empty content + reasoning_content. */
+function extractChatCompletionText(data) {
+  const choice = data?.choices?.[0];
+  if (!choice) return { text: "", finishReason: "" };
+  const finishReason = choice.finish_reason || choice.finishReason || "";
+
+  if (!choice.message) {
+    const t = choice.text;
+    return { text: typeof t === "string" ? t.trim() : "", finishReason };
+  }
+
+  const msg = choice.message;
+  let c = msg.content;
+
+  if (typeof c === "string" && c.trim()) return { text: c.trim(), finishReason };
+  if (Array.isArray(c)) {
+    const joined = c
+      .map((part) => {
+        if (typeof part === "string") return part;
+        if (part?.type === "text" && part.text) return part.text;
+        if (typeof part?.content === "string") return part.content;
+        return "";
+      })
+      .join("");
+    if (joined.trim()) return { text: joined.trim(), finishReason };
+  }
+
+  const r = msg.reasoning_content;
+  if (typeof r === "string" && r.trim()) {
+    const t = r.trim();
+    const sentences = t.split(/(?<=[.!?])\s+/).filter(Boolean);
+    const tail = sentences.length >= 2 ? sentences.slice(-2).join(" ") : t;
+    const clipped = tail.length > 400 ? tail.slice(-400).trim() : tail;
+    return { text: clipped, finishReason };
+  }
+
+  return { text: "", finishReason };
+}
+
 /**
  * @returns {{ ok: false, quote: string, detail: string } | { ok: true, quote: string }}
  */
@@ -96,7 +135,7 @@ export async function fetchPressConferenceQuote(matchData, options = {}) {
       { role: "system", content: SYSTEM },
       { role: "user", content: buildUserPrompt(matchData) },
     ],
-    max_tokens: 120,
+    max_tokens: 256,
     temperature: 0.9,
   });
 
@@ -110,12 +149,15 @@ export async function fetchPressConferenceQuote(matchData, options = {}) {
     }
 
     const data = await response.json();
-    const text = data.choices?.[0]?.message?.content?.trim();
+    const { text, finishReason } = extractChatCompletionText(data);
     if (!text) {
+      if (import.meta.env.DEV) {
+        console.warn("[press-conference] Empty assistant text; choice[0] keys:", data.choices?.[0] && Object.keys(data.choices[0]));
+      }
       return {
         ok: false,
         quote: offlineQuote(matchData),
-        detail: "Model returned no text (check deployment and response format).",
+        detail: `Model returned no usable text${finishReason ? ` (finish_reason: ${finishReason})` : ""}.`,
       };
     }
     return { ok: true, quote: text };
