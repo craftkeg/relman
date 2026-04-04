@@ -660,8 +660,7 @@ function trimPressQuoteOuter(s){
 }
 function appendPressNews(prev,{headline,quote,ok,detail,week,token}){
   const body=trimPressQuoteOuter(quote)||quote;
-  const detailBlock=!ok&&detail?`\n\n(${detail})`:"";
-  const row={w:week,fr:"Media",su:headline,bo:`\u201c${body}\u201d${detailBlock}`,_press:token,pc:1};
+  const row={w:week,fr:"Media",su:headline,bo:`\u201c${body}\u201d`,_press:token,pc:1};
   return [...prev.filter(n=>n._press!==token),row];
 }
 
