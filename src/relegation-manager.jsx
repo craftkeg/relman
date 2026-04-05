@@ -492,9 +492,9 @@ function LiveMatch({teams,pIdx,fix,wk,mEv,mH,mA,otherR,onFinish,onTeams}){
           <div style={{position:"absolute",inset:0,backgroundImage:`url(${MATCH_BG})`,backgroundSize:"cover",backgroundPosition:"center",opacity:0.4}} />
           <div style={{position:"relative",zIndex:1}}>
           <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-            <span style={{fontWeight:"bold",fontSize:13,color:isH?"#ffd700":"#c0c8e0"}}>{mH.nm}</span>
+            <span style={{fontWeight:"bold",fontSize:13,color:isH?"#fff":"#c0c8e0"}}>{mH.nm}</span>
             <span style={{fontSize:24,fontWeight:900,color:"#ffd700",minWidth:60,textAlign:"center",letterSpacing:4}}>{hG} - {aG}</span>
-            <span style={{fontWeight:"bold",fontSize:13,color:!isH?"#ffd700":"#c0c8e0"}}>{mA.nm}</span>
+            <span style={{fontWeight:"bold",fontSize:13,color:!isH?"#fff":"#c0c8e0"}}>{mA.nm}</span>
           </div>
           <div style={{marginTop:4,fontSize:14,fontWeight:900,color:ended?"#ff4040":htP?"#d0a030":"#40c040"}}>{ended?"FULL TIME":htP?"HALF TIME":`${min} min`}</div>
           <div style={{height:4,background:"#1a2040",margin:"4px 0"}}><div style={{height:"100%",background:min<=45?"#2a8a3a":"#c08000",width:`${(min/90)*100}%`,transition:"width 0.3s"}} /></div>
@@ -515,14 +515,15 @@ function LiveMatch({teams,pIdx,fix,wk,mEv,mH,mA,otherR,onFinish,onTeams}){
         </div>
         <div style={{display:"flex",gap:2,flexWrap:"wrap",marginTop:2,justifyContent:"center"}}>
           {!ended&&!htP&&<button className="cm-btn" onClick={()=>setPaused(p=>!p)} style={{background:paused?"#2a4060":""}}>{paused?"▶ Resume":"⏸ Pause"}</button>}
+          {!ended&&<>{[1,2,3].map(s=> <button key={s} className={`cm-btn${spd===s?" act":""}`} onClick={()=>setSpd(s)} style={{minWidth:32}}>{s===1?"▶":s===2?"▶▶":"▶▶▶"}</button>)}</>}
           {htP&&!ended&&<button className="cm-btn green" onClick={()=>{setHtP(false);setDisp(d=>[...d,{m:46,ty:"ko",tx:"Second half!",hl:1}]);}}>{"▶"} 2nd Half</button>}
-          {!ended&&<>{[1,2,3,4].map(s=> <button key={s} className={`cm-btn${spd===s?" act":""}`} onClick={()=>setSpd(s)} style={{minWidth:32}}>{s===1?"▶":s===2?"▶▶":s===3?"▶▶▶":"⏩"}</button>)}</>}
           {ended&&<button className="cm-btn green" onClick={()=>onFinish(hG,aG,disp)} style={{padding:"4px 20px",fontWeight:"bold"}}>Continue →</button>}
         </div>
-        {!ended&&<div style={{display:"flex",gap:1,marginTop:3}}>{[["match","Match"],["subs",`Subs(${3-subs})`],["tactics","Tactics"],["info","Info"]].map(([k,l])=> <button key={k} className={`cm-btn${mTab===k?" act":""}`} onClick={()=>setMTab(k)} style={{flex:1,fontSize:10}}>{l}</button>)}</div>}
+        {!ended&&<div style={{display:"flex",gap:1,marginTop:3}}>{[["match","Match"],["subs",`Subs(${3-subs})`],["tactics","Tactics"],["scores","Scores"]].map(([k,l])=> <button key={k} className={`cm-btn${mTab===k?" act":""}`} onClick={()=>setMTab(k)} style={{flex:1,fontSize:10}}>{l}</button>)}</div>}
+          {ended&&<div style={{display:"flex",gap:1,marginTop:3}}>{[["match","Match"],["scores","Scores"]].map(([k,l])=> <button key={k} className={`cm-btn${mTab===k?" act":""}`} onClick={()=>setMTab(k)} style={{flex:1,fontSize:10}}>{l}</button>)}</div>}
       </div>
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",margin:"0 2px 2px"}}>
-        {(mTab==="match"||ended)&&<div className="cm-panel" style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        {(mTab==="match"||(ended&&mTab!=="scores"))&&<div className="cm-panel" style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
           <div className="cm-title" style={{padding:"2px 6px"}}>Commentary</div>
           <div ref={ref} className="cm-sunken" style={{flex:1,overflowY:"auto",maxHeight:"calc(100vh - 300px)"}}>
             {disp.map((e,i)=> <div key={i} className={`ticker-line ${tClass(e.ty)}`}><span style={{color:"#506080",minWidth:26,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{e.m>0?`${e.m}'`:""}</span><span style={{minWidth:16}}>{icon(e.ty)}</span><span>{e.tx}</span></div>)}
@@ -590,10 +591,40 @@ function LiveMatch({teams,pIdx,fix,wk,mEv,mH,mA,otherR,onFinish,onTeams}){
             <td style={{color:ratingCol(parseFloat(r)),fontWeight:"bold"}}>{r}</td>
           </tr>;})}</tbody></table>
         </div></div>}
-        {mTab==="info"&&!ended&&<div className="cm-panel" style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}><div className="cm-title">Other Results</div><div className="cm-sunken" style={{flex:1,overflowY:"auto"}}>
-          {otherR.map((r,i)=> <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"3px 6px",borderBottom:"1px solid #1e2540",fontSize:10}}><span>{r.home}</span><span style={{fontWeight:"bold"}}>{r.hg}-{r.ag}</span><span>{r.away}</span></div>)}
-          {disp.filter(e=>e.ty==="goal").length>0&&<><div style={{padding:"6px 4px 2px",fontWeight:"bold",color:"#6090e0"}}>Goalscorers</div>{disp.filter(e=>e.ty==="goal").map((e,i)=> <div key={i} style={{padding:"2px 6px",fontSize:10}}>{"⚽"} {e.m}' {e.p} ({e.tm==="h"?mH.nm:mA.nm})</div>)}</>}
-        </div></div>}
+        {mTab==="scores"&&(()=>{
+          const liveScores=otherR.map(r=>{
+            let h=0,a=0;
+            const fired=(r.goals||[]).filter(g=>g.m<=min);
+            fired.forEach(g=>{if(g.tm==="h")h++;else a++;});
+            return {...r,liveH:h,liveA:a,fired};
+          });
+          const vidi=liveScores.flatMap(r=>r.fired.map(g=>{
+            const hNow=r.fired.filter(x=>x.tm==="h"&&x.m<=g.m).length;
+            const aNow=r.fired.filter(x=>x.tm==="a"&&x.m<=g.m).length;
+            return {m:g.m,p:g.p,home:r.home,away:r.away,hNow,aNow};
+          })).sort((a,b)=>a.m-b.m);
+          return <div className="cm-panel" style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+            <div className="cm-title">Scores</div>
+            <div className="cm-sunken" style={{flex:1,overflowY:"auto"}}>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"3px 6px",borderBottom:"1px solid #2a3050",fontSize:10,background:"#1a2040"}}>
+                <span style={{flex:1,color:"#ffd700",fontWeight:"bold"}}>{mH.nm}</span>
+                <span style={{fontWeight:"bold",minWidth:36,textAlign:"center",color:"#fff"}}>{hG}-{aG}</span>
+                <span style={{flex:1,textAlign:"right",color:"#ffd700",fontWeight:"bold"}}>{mA.nm}</span>
+              </div>
+              {liveScores.map((r,i)=> <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"3px 6px",borderBottom:"1px solid #1e2540",fontSize:10}}>
+                <span style={{flex:1}}>{r.home}</span>
+                <span style={{fontWeight:"bold",minWidth:36,textAlign:"center"}}>{r.liveH}-{r.liveA}</span>
+                <span style={{flex:1,textAlign:"right"}}>{r.away}</span>
+              </div>)}
+              {vidi.length>0&&<><div style={{padding:"6px 4px 2px",fontWeight:"bold",color:"#6090e0",fontSize:10,borderTop:"1px solid #2a3050",marginTop:4}}>Vidiprinter</div>
+              {vidi.map((g,i)=> <div key={i} className="ticker-line" style={{fontSize:10}}>
+                <span style={{color:"#506080",minWidth:26,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{g.m}'</span>
+                <span style={{minWidth:14}}>{"⚽"}</span>
+                <span>{g.home} {g.hNow}-{g.aNow} {g.away} ({g.p})</span>
+              </div>)}</>}
+            </div>
+          </div>;
+        })()}
       </div>
     </div>
   );
@@ -633,6 +664,7 @@ export default function RM(){
   const [teamTalk,setTeamTalk]=useState(null);
   const [talkScreen,setTalkScreen]=useState(false);
   const [showIntel,setShowIntel]=useState(false);
+  const [intelSel,setIntelSel]=useState(null);
   const [mustWinCount,setMustWinCount]=useState(0);
   const [careerHistory,setCareerHistory]=useState([]);
   const [showCareer,setShowCareer]=useState(false);
@@ -844,7 +876,7 @@ export default function RM(){
       m.done=1;m.hg=r.hG;m.ag=r.aG;
       h.gf+=r.hG;h.ga+=r.aG;a.gf+=r.aG;a.ga+=r.hG;
       if(r.hG>r.aG){h.w++;h.pts+=3;a.l++;}else if(r.hG<r.aG){a.w++;a.pts+=3;h.l++;}else{h.d++;h.pts++;a.d++;a.pts++;}
-      oR.push({home:h.nm,away:a.nm,hg:r.hG,ag:r.aG});
+      oR.push({home:h.nm,away:a.nm,hg:r.hG,ag:r.aG,goals:r.ev.filter(e=>e.ty==="goal")});
     });
     setTeams(nt);setMH(home);setMA(away);setMEv(result.ev);setMOR(oR);setMM(true);
   }
@@ -1113,7 +1145,7 @@ export default function RM(){
       <style>{css}</style>
       <div style={{background:"linear-gradient(180deg, #cc1020 0%, #a00818 100%)",padding:"5px 10px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #ffd700"}}>
         <span style={{fontFamily:"'Georgia','Times New Roman',serif",fontSize:14,fontWeight:900,color:"#fff",textShadow:"1px 1px 2px rgba(0,0,0,0.5)"}}>Relegation Manager</span>
-        <span style={{fontSize:9,color:"#ffd700",fontWeight:"bold"}}>Inspired by CM01/02</span>
+        <span style={{fontSize:9,color:"#ffd700",fontWeight:"bold"}}>Beta</span>
       </div>
       <div style={{position:"relative",overflow:"hidden",padding:"20px 16px",textAlign:"center",borderBottom:"1px solid #2a3050"}}>
         <div style={{position:"absolute",inset:0,backgroundImage:`url(${TITLE_BG})`,backgroundSize:"cover",backgroundPosition:"center",opacity:0.4}} />
@@ -1362,14 +1394,29 @@ export default function RM(){
       </div>
       {/* Action buttons - near top like in-game */}
       <div style={{padding:"4px 6px",display:"flex",justifyContent:"space-between",gap:4,background:"#141830",borderBottom:"1px solid #2a3050"}}>
-        <button className="cm-btn" onClick={()=>{setTalkScreen(false);setShowIntel(false);}}>← Back</button>
+        <button className="cm-btn" onClick={()=>{setTalkScreen(false);setShowIntel(false);setIntelSel(null);}}>← Back</button>
         <div style={{display:"flex",gap:4}}>
-          <button className={`cm-btn${showIntel?" act":""}`} onClick={()=>setShowIntel(!showIntel)} style={{padding:"4px 10px"}}>🔍 Intel</button>
-          <button className="cm-btn green" onClick={()=>{if(!teamTalk)setTeamTalk("win");if(teamTalk==="mustwin")setMustWinCount(c=>c+1);else setMustWinCount(0);setTalkScreen(false);setShowIntel(false);startLive();}} style={{fontWeight:"bold",padding:"4px 16px"}}>Kick Off ▶</button>
+          <button className={`cm-btn${showIntel?" act":""}`} onClick={()=>{setShowIntel(!showIntel);setIntelSel(null);}} style={{padding:"4px 10px"}}>🔍 Intel</button>
+          <button className="cm-btn green" onClick={()=>{if(!teamTalk)setTeamTalk("win");if(teamTalk==="mustwin")setMustWinCount(c=>c+1);else setMustWinCount(0);setTalkScreen(false);setShowIntel(false);setIntelSel(null);startLive();}} style={{fontWeight:"bold",padding:"4px 16px"}}>Kick Off ▶</button>
         </div>
       </div>
       {showIntel&&opp?<div className="cm-panel" style={{margin:2,flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{padding:"6px 8px",fontWeight:"bold",color:"#6090e0",fontSize:11}}>Opposition Intel: {opp.nm}</div>
+        {intelSel&&<div style={{padding:6}}>
+          <div className="cm-title" style={{marginBottom:2}}><span>{intelSel.nm}{intelSel.youth?<span style={{fontSize:10,color:"#d0a030",fontWeight:"bold",marginLeft:6}}>U21</span>:""} — {POS_L[intelSel.pos]} — Age {intelSel.age}</span><div style={{marginLeft:"auto"}}><button className="cm-btn" onClick={()=>setIntelSel(null)} style={{fontSize:10}}>✕</button></div></div>
+          <div className="cm-sunken" style={{padding:6}}>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:6,fontSize:10}}>
+              <span>OVR: <b>{intelSel.ovr}</b></span><span>Fit: <b style={{color:intelSel.fit<60?"#c00":"#000"}}>{intelSel.fit}%</b></span>
+              <span>Form: <b>{intelSel.frm}</b></span><span>Morale: <b>{intelSel.mor}</b></span>
+              <span>Value: <b style={{color:"#ffd700"}}>£{((intelSel.val||0)/1e6).toFixed(1)}M</b></span>
+              {intelSel.inj>0&&<span style={{color:"#ff4040",fontWeight:"bold"}}>INJURED {intelSel.inj}w</span>}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:3}}>
+              {Object.entries(intelSel.at).map(([k,v])=> <div key={k} style={{textAlign:"center",background:v>=75?"#1a3a1a":v>=55?"#2a2a10":"#3a1a1a",padding:"3px 2px",border:"1px solid #2a3050"}}><div style={{fontSize:8,textTransform:"uppercase",color:"#6070a0"}}>{k.slice(0,3)}</div><div style={{fontSize:14,fontWeight:900,color:v>=75?"#40ff40":v>=55?"#ffd700":"#ff4040"}}>{v}</div></div>)}
+            </div>
+            <div style={{marginTop:6,fontSize:10,color:"#6070a0"}}>Apps:{intelSel.ap} Gls:{intelSel.g} Ast:{intelSel.a} YC:{intelSel.yc} RC:{intelSel.rc}</div>
+          </div>
+        </div>}
         <div className="cm-sunken" style={{margin:"0 4px",flex:1,overflowY:"auto"}}>
           {/* Record & form */}
           <div style={{padding:"6px 8px",borderBottom:"1px solid #1e2540"}}>
@@ -1422,7 +1469,7 @@ export default function RM(){
           {/* Squad list */}
           <div style={{padding:"6px 8px"}}>
             <div style={{fontSize:10,color:"#6090e0",fontWeight:"bold",marginBottom:3}}>Key Players</div>
-            <table className="cm-table"><thead><tr><th style={{textAlign:"left"}}>Name</th><th>Pos</th><th>OVR</th><th>Fit</th></tr></thead>
+            <table className="cm-table"><thead><tr><th style={{textAlign:"left"}}>Name</th><th>Pos</th><th>OVR</th><th>Fit</th><th></th></tr></thead>
             <tbody>{(()=>{
               const oppXI=opp.xi.map(id=>opp.sq.find(p=>p.id===id)).filter(Boolean).sort((a,b)=>b.ovr-a.ovr);
               return oppXI.map(p=><tr key={p.id}>
@@ -1430,6 +1477,7 @@ export default function RM(){
                 <td>{p.pos}</td>
                 <td style={{fontWeight:"bold",color:p.ovr>=75?"#40ff40":p.ovr>=55?"#ffd700":"#ff6060"}}>{p.ovr}</td>
                 <td style={{color:p.fit<60?"#ff4040":"#c0c8e0"}}>{p.fit}</td>
+                <td><button type="button" className="cm-btn" onClick={e=>{e.stopPropagation();setIntelSel(p);}} style={{fontSize:8,padding:"1px 4px",minHeight:18,background:"#2040b0",color:"#fff",borderRadius:99,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center"}}>i</button></td>
               </tr>);
             })()}</tbody></table>
           </div>
