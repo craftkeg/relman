@@ -968,7 +968,7 @@ export default function RM(){
         w:nextWk,
         fr:"Media",
         su:`${home.nm} ${hg} - ${ag} ${away.nm}`,
-        bo:"Press conference quote loading…",
+        bo:"Talking to the press…",
         _press:mediaToken,
         pc:1,
       }];
