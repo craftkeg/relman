@@ -1,0 +1,6 @@
+{
+  "name": "relman-api",
+  "version": "1.0.0",
+  "description": "Azure Function proxy for press conference AI quotes",
+  "main": "press-conference/index.js"
+}

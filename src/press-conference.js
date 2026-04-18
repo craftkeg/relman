@@ -1,16 +1,14 @@
 /**
  * Post-match press quotes via Azure OpenAI / AI Foundry (chat completions).
  *
- * Flow:
- * 1. `npm run dev` + `.env.local` → browser calls `/api/azure-foundry/...` (Vite proxies to Azure, adds api-key).
- * 2. Production static build (e.g. GitHub Pages) → same path usually 404s; use dev or host a real proxy.
+ * Dev:  browser → /api/azure-foundry/… → Vite proxy → Azure (adds api-key)
+ * Prod: browser → VITE_PRESS_API_URL (Azure Function proxy) → Azure
  *
  * Env (.env.local, restart dev server):
- *   VITE_AZURE_FOUNDRY_ENDPOINT=https://YOUR-RESOURCE.cognitiveservices.azure.com
- *   AZURE_FOUNDRY_API_KEY=...   (recommended: not bundled into the browser; Vite proxy injects it)
- *   Or: VITE_AZURE_FOUNDRY_API_KEY=...   (works in dev; avoid for production builds)
- *   VITE_AZURE_FOUNDRY_DEPLOYMENT=gpt-oss-120b
- *   VITE_AZURE_FOUNDRY_API_VERSION=2024-12-01-preview   (optional)
+ *   VITE_AZURE_FOUNDRY_ENDPOINT  — Azure resource URL (dev proxy target)
+ *   AZURE_FOUNDRY_API_KEY        — server-side only, Vite proxy injects it
+ *   VITE_AZURE_FOUNDRY_DEPLOYMENT — model deployment name (default: gpt-oss-120b)
+ *   VITE_PRESS_API_URL           — production Azure Function URL (e.g. https://your-func.azurewebsites.net/api/press-conference)
  */
 
 const SYSTEM = `You are a football manager giving a post-match press conference. Speak in short, punchy quotes like a real Championship Manager press conference. 2-3 sentences max. Never break character. Vary your tone based on the result and context — frustrated after losses, cautiously optimistic after draws, proud after big wins. Reference specific match events when mentioned.`;
@@ -21,6 +19,7 @@ function readConfig() {
     apiKey: import.meta.env.VITE_AZURE_FOUNDRY_API_KEY || "",
     deployment: import.meta.env.VITE_AZURE_FOUNDRY_DEPLOYMENT || "gpt-oss-120b",
     apiVersion: import.meta.env.VITE_AZURE_FOUNDRY_API_VERSION || "2024-12-01-preview",
+    pressApiUrl: (import.meta.env.VITE_PRESS_API_URL || "").replace(/\/$/, ""),
   };
 }
 
@@ -104,9 +103,10 @@ function extractChatCompletionText(data) {
  */
 export async function fetchPressConferenceQuote(matchData, options = {}) {
   const { signal } = options;
-  const { endpoint, apiKey, deployment, apiVersion } = readConfig();
+  const { endpoint, apiKey, deployment, apiVersion, pressApiUrl } = readConfig();
 
-  // Dev: only the endpoint must be in VITE_* (browser). The proxy adds api-key from AZURE_FOUNDRY_API_KEY or VITE_* in .env.local (never log the key).
+  const useProxy = !import.meta.env.DEV && pressApiUrl;
+
   if (import.meta.env.DEV) {
     if (!endpoint) {
       return {
@@ -116,19 +116,23 @@ export async function fetchPressConferenceQuote(matchData, options = {}) {
           "Add VITE_AZURE_FOUNDRY_ENDPOINT to .env.local (and AZURE_FOUNDRY_API_KEY for the proxy), then restart npm run dev.",
       };
     }
-  } else if (!endpoint || !apiKey) {
+  } else if (!pressApiUrl) {
     return {
       ok: false,
       quote: offlineQuote(matchData),
-      detail:
-        "No Azure config in this build (static hosting needs a proxy or injected env with endpoint + key).",
+      detail: "Set VITE_PRESS_API_URL to your Azure Function proxy URL for production builds.",
     };
   }
 
-  const path = `/openai/deployments/${encodeURIComponent(deployment)}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`;
-  const url = import.meta.env.DEV ? `/api/azure-foundry${path}` : `${endpoint}${path}`;
-  const headers = { "Content-Type": "application/json" };
-  if (!import.meta.env.DEV) headers["api-key"] = apiKey;
+  let url, headers;
+  if (useProxy) {
+    url = pressApiUrl;
+    headers = { "Content-Type": "application/json" };
+  } else {
+    const path = `/openai/deployments/${encodeURIComponent(deployment)}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`;
+    url = `/api/azure-foundry${path}`;
+    headers = { "Content-Type": "application/json" };
+  }
 
   const body = JSON.stringify({
     messages: [
