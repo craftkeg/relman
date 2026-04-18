@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { fetchPressConferenceQuote } from "./press-conference.js";
+import { fetchHalfTimePundit } from "./half-time-pundit.js";
 import LEAGUES from "./teams.json";
+import { LEAGUE_PLAYERS } from "./players.js";
 
 // ── DATA ──────────────────────────────────────────────────
 const FN=["James","David","Michael","Chris","Daniel","Mark","Steve","Paul","Andrew","Tom","Ben","Sam","Jack","Ryan","Luke","Matt","Nathan","Scott","Gary","Lee","Wayne","Rio","Frank","John","Peter","Alan","Ian","Rob","Simon","Tony","Phil","Kevin","Nigel","Stuart","Craig","Darren","Jamie","Dean","Colin","Neil","Gareth","Owen","Aaron","Adam","Callum","Ethan","Liam","Noah","Oliver","Harry","George","Charlie","Leo","Alfie","Freddie","Oscar","Archie","Arthur","Henry","Jacob","Thomas","Joshua","William","Max","Theo","Finley","Sebastian","Elliot","Riley","Hugo","Louie","Toby","Reuben","Jude","Edward","Kai","Logan","Harvey","Harrison","Dylan","Elijah","Isaac","Tyler","Lucas","Jayden","Connor","Zack","Aiden","Blake","Kyle","Rhys","Caleb","Joel","Ellis","Evan","Rowan","Felix","Jesse","Troy","Miles","Rex","Finn","Cole","Noel","Ross","Kirk","Drew","Brent","Wade","Clay","Vince","Grant","Floyd","Lance","Clint","Hank","Chad","Seth","Kurt","Bart","Carl","Glen","Dale","Earl"];
@@ -77,11 +79,38 @@ function mkP(pos,q){
   const loc=currentNameLocale||"en";const names=NAMES[loc]||NAMES.en;
 return {id:uid(),nm:P(names.first)+" "+P(names.last),age,pos,at,ovr,wage:Math.round(ovr*ovr*2+R(100,2000)),val:Math.round((ovr*ovr*2+R(100,2000))*R(40,120)),mor:R(60,95),fit:R(70,100),frm:R(40,90),g:0,a:0,ap:0,yc:0,rc:0,inj:0,sus:0};
 }
-function mkSq(q){
+// Build a player from a real-squad entry: generate attributes via mkP then override the name.
+function mkRealP(real,q){
+  const p=mkP(real.pos,q);
+  p.nm=real.nm;
+  return p;
+}
+function mkSq(q,realSquad){
+  if(realSquad&&realSquad.length){
+    const s=realSquad.map(r=>mkRealP(r,q));
+    // Ensure every position has >=2 cover so promoteYouth doesn't fire U21s at kickoff.
+    ["GK","DL","DC","DR","DM","MC","ML","MR","AM","ST"].forEach(pos=>{
+      while(s.filter(p=>p.pos===pos).length<2)s.push(mkP(pos,q+R(-10,-3)));
+    });
+    while(s.length<25)s.push(mkP(P(POS),q+R(-10,-3)));
+    return s;
+  }
   const s=[];
   ["GK","GK","DL","DC","DC","DC","DR","DM","ML","MC","MC","MC","MR","AM","AM","ST","ST","ST"].forEach(p=>s.push(mkP(p,q)));
   while(s.length<25)s.push(mkP(P(POS),q+R(-10,-3)));
   return s;
+}
+// Position-aware default XI picker. Fills each formation slot with best-ovr fit at that position,
+// falling back to best-ovr-overall. Replaces the naive sq.slice(0,11) so AI opponents field sensible lineups.
+function pickDefaultXI(sq,form){
+  const xi=[],used=new Set();
+  form.s.forEach(pos=>{
+    const pick=sq.filter(p=>!used.has(p.id)&&p.pos===pos&&p.inj===0).sort((a,b)=>b.ovr-a.ovr)[0]
+            ||sq.filter(p=>!used.has(p.id)&&p.inj===0).sort((a,b)=>b.ovr-a.ovr)[0];
+    if(pick){xi.push(pick.id);used.add(pick.id);}
+  });
+  const sub=sq.filter(p=>!used.has(p.id)&&p.inj===0).sort((a,b)=>b.ovr-a.ovr).slice(0,5).map(p=>p.id);
+  return {xi,sub};
 }
 
 // ── MATCH ENGINE (with training bonus) ────────────────────
@@ -220,12 +249,16 @@ function mkFix(n){
 
 // ── WORLD GEN ─────────────────────────────────────────────
 // Phase 1: sim the first half, return world + bottom 6 for picking
-function generatePreWorld(){
+function generatePreWorld(league){
   const n=TEAMS.length;
+  const realRoster=(league&&LEAGUE_PLAYERS[league])||null;
   const teams=TEAMS.map((nm,i)=>{
-    const q=75-i*2+R(-5,5);const sq=mkSq(q);
+    const q=75-i*2+R(-5,5);
+    const realSquad=realRoster?realRoster[nm]:null;
+    const sq=mkSq(q,realSquad);
     if(i>=14)sq.forEach(p=>{p.frm=cl(p.frm-R(5,20),20,60);p.mor=cl(p.mor-R(5,15),30,70);});
-    return {id:uid(),nm,c:TEAM_DATA[i].c,q,sq,form:FORMS[0],tac:"Balanced",pass:"Mixed",tackle:"Normal",press:false,offside:false,bud:R(1,15)*1e6,rep:100-i*4+R(-2,2),isP:false,w:0,d:0,l:0,gf:0,ga:0,pts:0,xi:sq.slice(0,11).map(p=>p.id),sub:sq.slice(11,16).map(p=>p.id)};
+    const {xi,sub}=pickDefaultXI(sq,FORMS[0]);
+    return {id:uid(),nm,c:TEAM_DATA[i].c,q,sq,form:FORMS[0],tac:"Balanced",pass:"Mixed",tackle:"Normal",press:false,offside:false,bud:R(1,15)*1e6,rep:100-i*4+R(-2,2),isP:false,w:0,d:0,l:0,gf:0,ga:0,pts:0,xi,sub};
   });
   const fix=mkFix(n);
   fix.slice(0,19).forEach(round=>{round.forEach(m=>{
@@ -399,6 +432,7 @@ const css = `
 .ticker-line.card { background: #2e2a10; color: #ffd700; }
 .ticker-line.big { background: #1a2050; color: #80b0ff; font-weight: bold; }
 .ticker-line.injury { background: #2e1a1a; color: #ff8080; }
+.ticker-line.pundit { background: #1a1a2e; color: #c0c8e0; font-style: italic; border-left: 3px solid #6090e0; padding-left: 4px; }
 @keyframes cmBlink { 0%,100%{opacity:1}50%{opacity:0.3} }
 @keyframes goalFlash { 0%{background:#1a2e1a}15%{background:#ffd700}30%{background:#1a2e1a}45%{background:#ffd700}60%{background:#1a2e1a}75%{background:#3a5a1a}100%{background:#1a2e1a} }
 .blink { animation: cmBlink 1s infinite; }
@@ -406,7 +440,7 @@ const css = `
 `;
 
 // ── LIVE MATCH ────────────────────────────────────────────
-function LiveMatch({teams,pIdx,fix,wk,mEv,mH,mA,otherR,onFinish,onTeams}){
+function LiveMatch({teams,pIdx,fix,wk,mEv,mH,mA,otherR,onFinish,onTeams,league}){
   const [paused,setPaused]=useState(false);
   const [spd,setSpd]=useState(2);
   const [min,setMin]=useState(0);
@@ -438,6 +472,27 @@ function LiveMatch({teams,pIdx,fix,wk,mEv,mH,mA,otherR,onFinish,onTeams}){
     },ms);
     return ()=>{if(iRef.current)clearInterval(iRef.current);};
   },[paused,ended,spd,htP]);
+
+  const punditDone=useRef(false);
+  useEffect(()=>{
+    if(!htP||punditDone.current)return;
+    punditDone.current=true;
+    const ord=n=>n===1?"st":n===2?"nd":n===3?"rd":"th";
+    const sn=[...teams].sort((a,b)=>b.pts-a.pts||(b.gf-b.ga)-(a.gf-a.ga)||b.gf-a.gf);
+    const pn=sn.indexOf(pt)+1;
+    const myG=isH?hG:aG,og=isH?aG:hG;
+    const situation=myG===0&&og===0?"goalless":myG>og?"winning":myG<og?"losing":"drawing";
+    const goalEvents=disp.filter(e=>e.ty==="goal").map(e=>`${e.p} ${e.m}'`).join(", ");
+    const htData={
+      homeTeam:mH.nm, awayTeam:mA.nm, playerTeam:pt.nm,
+      score:`${hG}-${aG}`, situation, venue:isH?"at home":"away",
+      events:goalEvents||undefined, position:`${pn}${ord(pn)}`,
+    };
+    fetchHalfTimePundit(htData,league).then(r=>{
+      const entries=r.lines.map(line=>({m:45,ty:"pundit",tx:line,hl:0}));
+      setDisp(d=>[...d,...entries]);
+    }).catch(()=>{});
+  },[htP]);
 
   const doSub=(offId,onId)=>{if(subs>=3)return;const nt=teams.map((t,i)=>i===pIdx?{...t,xi:t.xi.map(x=>x===offId?onId:x),sub:t.sub.filter(x=>x!==onId)}:t);const off=pt.sq.find(p=>p.id===offId),on=pt.sq.find(p=>p.id===onId);onTeams(nt);setSubs(s=>s+1);setDisp(d=>[...d,{m:min,ty:"sub",tx:`SUB: ${on?.nm} ON for ${off?.nm}`,hl:1}]);setSubOff(null);setMTab("match");};
   const chgTac=t=>{onTeams(teams.map((x,i)=>i===pIdx?{...x,tac:t}:x));setDisp(d=>[...d,{m:min,ty:"com",tx:`Tactic changed to ${t}`,hl:1}]);};
@@ -477,8 +532,8 @@ function LiveMatch({teams,pIdx,fix,wk,mEv,mH,mA,otherR,onFinish,onTeams}){
 
   const ratingCol=(r)=>r>=7.5?"#40ff40":r>=6.5?"#ffd700":r>=5.5?"#c0c8e0":"#ff6060";
 
-  const icon=ty=>({goal:"⚽",yel:"🟨",red:"🟥",inj:"🏥",sub:"🔄",sav:"🧤",wide:"↗",cor:"📐",tck:"🦶",ht:"⏸",ft:"🏁",ko:"📣"}[ty]||"•");
-  const tClass=ty=>ty==="goal"?"goal":ty==="yel"||ty==="red"?"card":ty==="ht"||ty==="ft"||ty==="ko"?"big":ty==="inj"?"injury":"";
+  const icon=ty=>({goal:"⚽",yel:"🟨",red:"🟥",inj:"🏥",sub:"🔄",sav:"🧤",wide:"↗",cor:"📐",tck:"🦶",ht:"⏸",ft:"🏁",ko:"📣",pundit:"📺"}[ty]||"•");
+  const tClass=ty=>ty==="goal"?"goal":ty==="yel"||ty==="red"?"card":ty==="ht"||ty==="ft"||ty==="ko"?"big":ty==="inj"?"injury":ty==="pundit"?"pundit":"";
 
   return (
     <div style={{background:"#0e1220",minHeight:"100vh",fontFamily:"'Tahoma',sans-serif",fontSize:11,display:"flex",flexDirection:"column"}}>
@@ -526,7 +581,7 @@ function LiveMatch({teams,pIdx,fix,wk,mEv,mH,mA,otherR,onFinish,onTeams}){
         {(mTab==="match"||(ended&&mTab!=="scores"))&&<div className="cm-panel" style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
           <div className="cm-title" style={{padding:"2px 6px"}}>Commentary</div>
           <div ref={ref} className="cm-sunken" style={{flex:1,overflowY:"auto",maxHeight:"calc(100vh - 300px)"}}>
-            {disp.map((e,i)=> <div key={i} className={`ticker-line ${tClass(e.ty)}`}><span style={{color:"#506080",minWidth:26,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{e.m>0?`${e.m}'`:""}</span><span style={{minWidth:16}}>{icon(e.ty)}</span><span>{e.tx}</span></div>)}
+            {disp.map((e,i)=> <div key={i} className={`ticker-line ${tClass(e.ty)}`}><span style={{color:e.ty==="pundit"?"#6090e0":"#506080",minWidth:26,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{e.ty==="pundit"?"HT":e.m>0?`${e.m}'`:""}</span><span style={{minWidth:16}}>{icon(e.ty)}</span><span>{e.tx}</span></div>)}
             {!ended&&!htP&&min>0&&min<90&&<div className="ticker-line"><span style={{color:"#506080",minWidth:26,textAlign:"right"}}>{min}'</span><span className="blink" style={{color:"#506080"}}>...</span></div>}
           </div>
         </div>}
@@ -767,7 +822,7 @@ export default function RM(){
     TEAMS=TEAM_DATA.map(t=>t.nm);
     currentNameLocale=LEAGUE_LOCALE[lk]||"en";
     setLeague(lk);
-    const pw=generatePreWorld();
+    const pw=generatePreWorld(lk);
     setPreWorld(pw);
     setScr("pick");
   }
@@ -1331,7 +1386,7 @@ export default function RM(){
     </div>
   );
 
-  if(mm&&mH&&mA) return <LiveMatch teams={teams} pIdx={pIdx} fix={fix} wk={wk} mEv={mEv} mH={mH} mA={mA} otherR={mOR} onFinish={finishMatch} onTeams={setTeams} />;
+  if(mm&&mH&&mA) return <LiveMatch teams={teams} pIdx={pIdx} fix={fix} wk={wk} mEv={mEv} mH={mH} mA={mA} otherR={mOR} onFinish={finishMatch} onTeams={setTeams} league={league} />;
 
   // ── PRE-MATCH TEAM TALK ──────────────────────────────────
   if(talkScreen&&pt){

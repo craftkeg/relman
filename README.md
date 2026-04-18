@@ -33,6 +33,31 @@ VITE_AZURE_FOUNDRY_DEPLOYMENT=your-deployment
 AZURE_FOUNDRY_API_KEY=your-key
 ```
 
+## Updating squads
+
+The top five European leagues use real player names and positions. Each has its own JSON file:
+
+- English Premier League — [src/players-epl.json](src/players-epl.json)
+- Italian Serie A — [src/players-seriea.json](src/players-seriea.json)
+- Spanish La Liga — [src/players-laliga.json](src/players-laliga.json)
+- French Ligue 1 — [src/players-ligue1.json](src/players-ligue1.json)
+- German Bundesliga — [src/players-bundesliga.json](src/players-bundesliga.json)
+
+The Scottish Premiership uses generated names.
+
+To add or remove a player, edit the JSON directly. Each entry is `{"nm": "Player Name", "pos": "CODE"}`. Valid position codes:
+
+- `GK` — goalkeeper
+- `DL`, `DC`, `DR` — left/centre/right defender
+- `DM` — defensive midfielder
+- `MC`, `ML`, `MR` — central/left/right midfielder
+- `AM` — attacking midfielder
+- `ST` — striker
+
+Team keys must match `src/teams.json` exactly. The loader prints a console warning on startup if a team is missing, a key is unknown, or a name is duplicated within a team.
+
+Changes only apply to **new careers** — in-progress saves keep their existing squads. After editing, start a new career to see the updated squads. Pitch view displays the surname only via `.split(" ").pop()`, so "Virgil van Dijk" shows as "Dijk".
+
 ## Azure Function Proxy (press conferences on live site)
 
 The GitHub Pages build is static, so AI press conference quotes need a server-side proxy to hold the API key. An Azure Function in `api/` handles this.
