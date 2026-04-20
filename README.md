@@ -11,7 +11,9 @@ Live on GitHub Pages: **https://craftkeg.github.io/relman/**
 - Squad selection, formation, and tactical instructions
 - Text-based match engine with live commentary
 - League table, fixtures, and results
-- Press conferences (AI-generated via Azure OpenAI)
+- AI-powered pre-match press room with journalist questions and manager replies
+- AI assistant manager tactical brief and dressing-room team talks
+- AI half-time pundit panel and post-match press conferences via Azure OpenAI
 - Auto-save and career history
 
 ## Development
@@ -25,7 +27,7 @@ Runs on `http://localhost:5173/relman/`.
 
 ### Environment variables (optional)
 
-For press conference features, create `.env.local`:
+For AI features, create `.env.local`:
 
 ```
 VITE_AZURE_FOUNDRY_ENDPOINT=https://your-resource.cognitiveservices.azure.com
@@ -58,9 +60,9 @@ Team keys must match `src/teams.json` exactly. The loader prints a console warni
 
 Changes only apply to **new careers** — in-progress saves keep their existing squads. After editing, start a new career to see the updated squads. Pitch view displays the surname only via `.split(" ").pop()`, so "Virgil van Dijk" shows as "Dijk".
 
-## Azure Function Proxy (press conferences on live site)
+## Azure Function Proxy (AI features on live site)
 
-The GitHub Pages build is static, so AI press conference quotes need a server-side proxy to hold the API key. An Azure Function in `api/` handles this.
+The GitHub Pages build is static, so the AI features need a server-side proxy to hold the API key. An Azure Function in `api/` handles this.
 
 ### Deploy the function
 
