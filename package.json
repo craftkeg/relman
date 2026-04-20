@@ -2,10 +2,12 @@
   "name": "relman",
   "private": true,
   "version": "1.0.0",
-  "description": "Championship Manager-style relegation survival game built with React",
+  "description": "A relegation survival football management game inspired by Championship Manager 01/02",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:kill": "bash ./scripts/kill-dev-server.sh",
+    "dev:restart": "npm run dev:kill && vite",
     "build": "vite build",
     "preview": "vite preview",
     "link": "open http://localhost:5173/relman/"

@@ -1726,36 +1726,6 @@ export default function RM(){
           </div>
         </div>
       </div>:<>
-      {/* Assistant advice */}
-      {(()=>{
-        const liveAI=!!(asstBrief&&asstBrief.ok);
-        const offlineBriefShown=!!(asstBrief&&!asstBrief.ok);
-        const waiting=!asstBrief&&aiLoading.b;
-        const stalled=!asstBrief&&!aiLoading.b;
-        let pillBg="#3a2020",pillFg="#c08080",pillTxt="OFFLINE";
-        if(liveAI){pillBg="#1a4020";pillFg="#40ff80";pillTxt="AI";}
-        else if(waiting){pillBg="#1a2540";pillFg="#8090c0";pillTxt="WAIT";}
-        else if(stalled){pillBg="#3a3020";pillFg="#d0a080";pillTxt="OFFLINE";}
-        return (
-      <div style={{background:liveAI?"#10241a":"#141830",borderBottom:`1px solid ${liveAI?"#2a6a3a":"#2a3050"}`,padding:"8px 10px",transition:"background 0.3s ease"}}>
-        <div style={{fontSize:10,color:liveAI?"#80ffaa":"#6090e0",fontWeight:"bold",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-          <span style={{flex:"1 1 auto",minWidth:0}}>Asst. Manager</span>
-          <span style={{padding:"2px 8px",border:`1px solid ${liveAI?"#40a060":"#604040"}`,flexShrink:0,background:pillBg,color:pillFg,fontWeight:"bold",fontSize:9,letterSpacing:0.5}}>
-            {pillTxt}
-          </span>
-        </div>
-        <div style={{fontSize:11,color:liveAI?"#d0e8d8":"#8090b0",lineHeight:1.5,whiteSpace:"pre-wrap"}}>
-          {waiting&&<span style={{color:"#506080",fontStyle:"italic"}}>Talking to the assistant manager…</span>}
-          {!waiting&&asstBrief&&asstBrief.text}
-          {!waiting&&!asstBrief&&stalled&&<>
-            <span>{asstAdvice}</span>
-            <div style={{fontSize:10,color:"#8090b0",marginTop:4,fontStyle:"italic"}}>{asstSuggestion}</div>
-          </>}
-        </div>
-        {offlineBriefShown&&<div style={{fontSize:10,color:"#8090b0",marginTop:4,fontStyle:"italic"}}>{asstSuggestion}</div>}
-      </div>
-        );
-      })()}
       {/* Press + Team Talk */}
       <div style={{flex:1,overflowY:"auto",padding:"2px 0"}}>
         {/* Press conference */}
@@ -1763,12 +1733,14 @@ export default function RM(){
           <div style={{padding:"6px 8px",fontWeight:"bold",color:"#6090e0",fontSize:11,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span>Press Room</span>
             <span style={{fontSize:9,color:"#506080",fontWeight:"normal",display:"flex",gap:6,alignItems:"center"}}>
-              {pressQuestion?.reporter&&<span>{pressQuestion.reporter}</span>}
               {pressQuestion&&<span style={{padding:"1px 5px",borderRadius:2,background:pressQuestion.ok?"#1a4020":"#3a2020",color:pressQuestion.ok?"#40ff80":"#c08080",fontWeight:"bold",fontSize:8,letterSpacing:0.5}}>{pressQuestion.ok?"AI":"OFFLINE"}</span>}
             </span>
           </div>
           <div className="cm-sunken" style={{margin:"0 4px 4px"}}>
-            <div style={{padding:"8px 10px",borderBottom:"1px solid #1e2540",fontSize:11,color:"#c0c8e0",lineHeight:1.5,fontStyle:"italic",minHeight:32}}>
+            <div style={{padding:"6px 8px",fontSize:9,color:"#506080",fontWeight:"bold",textTransform:"uppercase",letterSpacing:0.5}}>
+              {pressQuestion?.reporter||"Reporter"}
+            </div>
+            <div style={{padding:"8px 10px",borderTop:"1px solid #1e2540",fontSize:11,color:"#c0c8e0",lineHeight:1.5,fontStyle:"italic",minHeight:32}}>
               {aiLoading.q&&!pressQuestion?<span style={{color:"#506080"}}>The reporter clears their throat...</span>:pressQuestion?`"${pressQuestion.question}"`:<span style={{color:"#506080"}}>Waiting for the press...</span>}
             </div>
             <div style={{padding:"6px 8px",fontSize:9,color:"#506080",fontWeight:"bold",textTransform:"uppercase",letterSpacing:0.5}}>Your reply:</div>
@@ -1787,11 +1759,36 @@ export default function RM(){
             </div>}
           </div>
         </div>
-        {/* Team talk */}
+        {/* Dressing room */}
+        {(()=>{
+          const liveAI=!!(asstBrief&&asstBrief.ok);
+          const offlineBriefShown=!!(asstBrief&&!asstBrief.ok);
+          const waiting=!asstBrief&&aiLoading.b;
+          const stalled=!asstBrief&&!aiLoading.b;
+          let pillBg="#3a2020",pillFg="#c08080",pillTxt="OFFLINE";
+          if(liveAI){pillBg="#1a4020";pillFg="#40ff80";pillTxt="AI";}
+          else if(waiting){pillBg="#1a2540";pillFg="#8090c0";pillTxt="WAIT";}
+          else if(stalled){pillBg="#3a3020";pillFg="#d0a080";pillTxt="OFFLINE";}
+          return (
         <div className="cm-panel" style={{margin:2}}>
-          <div style={{padding:"6px 8px",fontWeight:"bold",color:"#6090e0",fontSize:11}}>Dressing Room — address the squad:</div>
+          <div style={{padding:"6px 8px",fontWeight:"bold",color:"#6090e0",fontSize:11,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+            <span>Dressing Room</span>
+            <span style={{padding:"1px 5px",borderRadius:2,background:pillBg,color:pillFg,fontWeight:"bold",fontSize:8,letterSpacing:0.5,border:`1px solid ${liveAI?"#40a060":waiting?"#405080":"#604040"}`}}>
+              {pillTxt}
+            </span>
+          </div>
           <div className="cm-sunken" style={{margin:"0 4px 4px"}}>
-            <div style={{padding:"6px 8px",fontSize:9,color:"#506080",fontWeight:"bold",textTransform:"uppercase",letterSpacing:0.5}}>Your talk:</div>
+            <div style={{padding:"6px 8px",fontSize:9,color:"#506080",fontWeight:"bold",textTransform:"uppercase",letterSpacing:0.5}}>Assistant Manager</div>
+            <div style={{padding:"8px 10px",borderTop:"1px solid #1e2540",fontSize:11,color:liveAI?"#d0e8d8":"#c0c8e0",lineHeight:1.5,whiteSpace:"pre-wrap",minHeight:48,fontStyle:waiting?"italic":"normal"}}>
+              {waiting&&<span style={{color:"#506080"}}>Talking to the assistant manager...</span>}
+              {!waiting&&asstBrief&&asstBrief.text}
+              {!waiting&&!asstBrief&&stalled&&<>
+                <span>{asstAdvice}</span>
+                <div style={{fontSize:10,color:"#8090b0",marginTop:4,fontStyle:"italic"}}>{asstSuggestion}</div>
+              </>}
+            </div>
+            {offlineBriefShown&&<div style={{padding:"0 10px 8px",fontSize:10,color:"#8090b0",fontStyle:"italic"}}>{asstSuggestion}</div>}
+            <div style={{padding:"6px 8px",borderTop:"1px solid #1e2540",fontSize:9,color:"#506080",fontWeight:"bold",textTransform:"uppercase",letterSpacing:0.5}}>Your talk:</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:2,padding:"0 4px 4px"}}>
               {TALKS.map(t=> <div key={t.id} onClick={()=>pickTeamTalk(t.id)} style={{padding:"6px 8px",cursor:"pointer",
               background:teamTalk===t.id?"#2040b0":"#0a1020",border:teamTalk===t.id?"1px solid #4060c0":"1px solid #1e2540"}}
@@ -1807,6 +1804,8 @@ export default function RM(){
             </div>}
           </div>
         </div>
+          );
+        })()}
       </div></>}
     </div>
     );

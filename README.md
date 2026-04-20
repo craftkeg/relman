@@ -1,6 +1,6 @@
 # Relegation Manager
 
-A Championship Manager 01/02-style football management game built with React. You take over a struggling side at gameweek 19 with 19 games to survive relegation.
+A relegation survival football management game inspired by Championship Manager 01/02. You take over a struggling side at gameweek 19 with 19 games to survive relegation.
 
 ## Play
 
