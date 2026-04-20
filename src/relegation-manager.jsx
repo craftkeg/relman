@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { fetchPressConferenceQuote } from "./press-conference.js";
 import { fetchHalfTimePundit } from "./half-time-pundit.js";
+import { fetchJournalistQuestion, fetchManagerResponse, fetchTeamTalkSpeech, fetchAssistantBrief, offlineQuestion, offlineResponse, offlineTalk, offlineBrief, pickReporter } from "./pre-match-press.js";
 import LEAGUES from "./teams.json";
 import { LEAGUE_PLAYERS } from "./players.js";
 
@@ -434,6 +435,7 @@ const css = `
 .ticker-line.injury { background: #2e1a1a; color: #ff8080; }
 .ticker-line.pundit { background: #1a1a2e; color: #c0c8e0; font-style: italic; border-left: 3px solid #6090e0; padding-left: 4px; }
 @keyframes cmBlink { 0%,100%{opacity:1}50%{opacity:0.3} }
+@keyframes pulse-gold { 0%,100%{box-shadow:0 0 0 1px #ffd700, 0 0 4px rgba(255,215,0,0.4)} 50%{box-shadow:0 0 0 1px #ffd700, 0 0 12px rgba(255,215,0,0.8)} }
 @keyframes goalFlash { 0%{background:#1a2e1a}15%{background:#ffd700}30%{background:#1a2e1a}45%{background:#ffd700}60%{background:#1a2e1a}75%{background:#3a5a1a}100%{background:#1a2e1a} }
 .blink { animation: cmBlink 1s infinite; }
 @media (max-width: 600px) { .cm-table { font-size: 9px; } .cm-table th,.cm-table td { padding: 2px 2px; } .cm-btn { font-size: 10px; padding: 2px 6px; min-height: 28px; } .hide-mob { display: none !important; } .ticker-line { font-size: 10px; } }
@@ -721,6 +723,13 @@ export default function RM(){
   const [showIntel,setShowIntel]=useState(false);
   const [intelSel,setIntelSel]=useState(null);
   const [mustWinCount,setMustWinCount]=useState(0);
+  const [mindGamesCount,setMindGamesCount]=useState(0);
+  const [pressTone,setPressTone]=useState(null);
+  const [pressQuestion,setPressQuestion]=useState(null); // { question, reporter, ok }
+  const [pressResponse,setPressResponse]=useState(null); // { quote, ok }
+  const [teamTalkSpeech,setTeamTalkSpeech]=useState(null); // { speech, ok }
+  const [asstBrief,setAsstBrief]=useState(null); // { text, ok }
+  const [aiLoading,setAiLoading]=useState({q:false,r:false,s:false,b:false});
   const [careerHistory,setCareerHistory]=useState([]);
   const [showCareer,setShowCareer]=useState(false);
   const [endTab,setEndTab]=useState("news");
@@ -748,7 +757,7 @@ export default function RM(){
         const c=pressCtxRef.current;
         setNews(prev=>{
           const next=appendPressNews(prev,{headline,quote:r.quote,ok:r.ok,detail:r.detail||"",week,token});
-          if(c)autoSave(c.nt,c.fix,c.wk,next,c.pIdx,league,c.th,c.training,c.streak,c.teamTalk,c.mwc);
+          if(c)autoSave(c.nt,c.fix,c.wk,next,c.pIdx,league,c.th,c.training,c.streak,c.teamTalk,c.mwc,c.pTone,c.mgc);
           return next;
         });
         setPressPending(null);
@@ -759,7 +768,7 @@ export default function RM(){
         const c=pressCtxRef.current;
         setNews(prev=>{
           const next=appendPressNews(prev,{headline,quote:"It's been a long day — we'll speak again at the next match.",ok:false,detail:String(e?.message||e),week,token});
-          if(c)autoSave(c.nt,c.fix,c.wk,next,c.pIdx,league,c.th,c.training,c.streak,c.teamTalk,c.mwc);
+          if(c)autoSave(c.nt,c.fix,c.wk,next,c.pIdx,league,c.th,c.training,c.streak,c.teamTalk,c.mwc,c.pTone,c.mgc);
           return next;
         });
         setPressPending(null);
@@ -767,6 +776,138 @@ export default function RM(){
       });
     return()=>{cancelled=true;};
   },[pressPending,league]);
+
+  // ── Pre-match AI press room ────────────────────────────────
+  const preMatchCtxRef=useRef(null);
+  function buildPreMatchCtx(){
+    const cur=teams[pIdx];if(!cur)return null;
+    const round=fix[wk];if(!round)return null;
+    const pm=round.find(m=>m.h===pIdx||m.a===pIdx);if(!pm)return null;
+    const isHome=pm.h===pIdx;
+    const oppIdx=isHome?pm.a:pm.h;
+    const opp=teams[oppIdx];if(!opp)return null;
+    const oppSorted=[...teams].sort((a,b)=>b.pts-a.pts||(b.gf-b.ga)-(a.gf-a.ga));
+    const oppPos=oppSorted.indexOf(opp)+1;
+    const myPos=oppSorted.indexOf(cur)+1;
+    const oppRelZone=oppPos>=18;
+    const oppTop6=oppPos<=6;
+    const recentForm=[];
+    for(let w=Math.max(0,wk-5);w<wk;w++){
+      const rd=fix[w];const gm=rd?.find(m=>m.h===pIdx||m.a===pIdx);
+      if(gm&&gm.done){const isPH=gm.h===pIdx;const myG=isPH?gm.hg:gm.ag;const oppG=isPH?gm.ag:gm.hg;
+        recentForm.push(myG>oppG?"W":myG<oppG?"L":"D");}
+    }
+    const xiPlayers=cur.xi.map(id=>cur.sq.find(p=>p.id===id)).filter(Boolean);
+    const keyPlayers=[...xiPlayers].sort((a,b)=>b.ovr-a.ovr).slice(0,4).map(p=>p.nm);
+    const oppXIPlayers=opp.xi.map(id=>opp.sq.find(p=>p.id===id)).filter(Boolean);
+    const briefField=p=>({nm:p.nm,pos:p.pos,ovr:p.ovr,fit:p.fit,frm:p.frm,g:p.g,a:p.a,yc:p.yc,inj:p.inj,sus:p.sus});
+    const oppXI=[...oppXIPlayers].sort((a,b)=>b.ovr-a.ovr).slice(0,4).map(briefField);
+    const ourXI=[...xiPlayers].sort((a,b)=>b.ovr-a.ovr).slice(0,4).map(briefField);
+    const oppFormRaw=[];
+    for(let w=Math.max(0,wk-5);w<wk;w++){
+      const rd=fix[w];const gm=rd?.find(m=>m.h===oppIdx||m.a===oppIdx);
+      if(gm&&gm.done){const isOH=gm.h===oppIdx;const og=isOH?gm.hg:gm.ag;const eg=isOH?gm.ag:gm.hg;
+        oppFormRaw.push(og>eg?"W":og<eg?"L":"D");}
+    }
+    const watchFit=oppXIPlayers.find(p=>p.fit<70);
+    const watchCards=oppXIPlayers.find(p=>p.yc>=4);
+    let fallbackAdvice="";
+    if(oppRelZone)fallbackAdvice=`${opp.nm} are in the bottom three with us, so this is a proper six-pointer. We should be on the front foot here.`;
+    else if(oppTop6)fallbackAdvice=`${opp.nm} are flying near the top end, so we'll need to stay compact and pick our moments.`;
+    else fallbackAdvice=`${opp.nm} are solid but beatable. If we get the tempo right, there's something in this for us.`;
+    if(watchFit)fallbackAdvice+=` ${watchFit.nm} doesn't look fully fit, so we can test him.`;
+    if(watchCards)fallbackAdvice+=` ${watchCards.nm} is one booking away from a ban too.`;
+    fallbackAdvice+=" Worth keeping an eye on that once the match starts.";
+    return{playerTeam:cur.nm,opponent:opp.nm,venue:isHome?"home":"away",position:myPos,opponentPosition:oppPos,recentForm,league,keyPlayers,oppIdx,
+      oppFormation:opp.form?.n||"4-4-2",oppMentality:opp.tac,oppPass:opp.pass,oppTackle:opp.tackle,oppPress:!!opp.press,oppOffside:!!opp.offside,
+      oppForm:oppFormRaw.join(""),oppXI,ourXI,fallbackAdvice};
+  }
+
+  // Fetch journalist question when pre-match screen opens
+  const fetchedQRef=useRef(false);
+  useEffect(()=>{
+    if(!talkScreen){fetchedQRef.current=false;return;}
+    if(fetchedQRef.current)return;
+    const ctx=buildPreMatchCtx();if(!ctx)return;
+    fetchedQRef.current=true;
+    preMatchCtxRef.current=ctx;
+    const reporter=pickReporter(league);
+    let cancelled=false;
+    setAiLoading(s=>({...s,q:true}));
+    // Background fetch — generous timeout so AI normally lands first; canned fallback only if model truly stalls
+    const tid=setTimeout(()=>{
+      if(cancelled)return;
+      setPressQuestion(prev=>prev||{question:offlineQuestion(),reporter,ok:false});
+    },8000);
+    fetchJournalistQuestion({...ctx,reporter})
+      .then(r=>{if(cancelled)return;clearTimeout(tid);setPressQuestion({question:r.question,reporter:r.reporter,ok:r.ok});if(import.meta.env.DEV)console.log("[pre-match] journalist:",r.ok?"AI":"OFFLINE",r.detail||"");})
+      .catch(e=>{if(cancelled)return;clearTimeout(tid);setPressQuestion(prev=>prev||{question:offlineQuestion(),reporter,ok:false});if(import.meta.env.DEV)console.warn("[pre-match] journalist error:",e);})
+      .finally(()=>{setAiLoading(s=>({...s,q:false}));});
+    return()=>{cancelled=true;clearTimeout(tid);fetchedQRef.current=false;};
+  },[talkScreen]);
+
+  useEffect(()=>{
+    if(!talkScreen)return;
+    setAiLoading(s=>({...s,b:true}));
+    const ctx=buildPreMatchCtx();
+    if(!ctx){
+      setAsstBrief({text:offlineBrief(),ok:false});
+      setAiLoading(s=>({...s,b:false}));
+      return;
+    }
+    let cancelled=false;
+    const ac=new AbortController();
+    const btid=setTimeout(()=>{
+      if(cancelled)return;
+      ac.abort();
+      setAsstBrief(prev=>prev||{text:offlineBrief(ctx.fallbackAdvice),ok:false});
+    },15000);
+    fetchAssistantBrief(ctx,{signal:ac.signal})
+      .then(r=>{if(cancelled)return;clearTimeout(btid);setAsstBrief({text:r.text,ok:r.ok});if(import.meta.env.DEV)console.log("[pre-match] asst brief:",r.ok?"AI":"OFFLINE",r.detail||"");})
+      .catch(e=>{
+        if(cancelled)return;
+        clearTimeout(btid);
+        if(import.meta.env.DEV&&e?.name==="AbortError")console.warn("[pre-match] asst brief aborted");
+        else if(import.meta.env.DEV)console.warn("[pre-match] asst brief error:",e);
+        setAsstBrief(prev=>prev||{text:offlineBrief(ctx.fallbackAdvice),ok:false});
+      })
+      .finally(()=>{setAiLoading(s=>({...s,b:false}));});
+    return()=>{cancelled=true;clearTimeout(btid);ac.abort();};
+  },[talkScreen]);
+
+  function pickPressTone(tone){
+    setPressTone(tone);
+    setPressResponse(null);
+    setAiLoading(s=>({...s,r:true}));
+    const ctx=preMatchCtxRef.current||buildPreMatchCtx();
+    const question=pressQuestion?.question||"Are you confident going into this one?";
+    let settled=false;
+    // 7s grace so the AI normally wins; if it lands later we still swap the fallback for the AI quote
+    const tid=setTimeout(()=>{
+      if(settled)return;
+      setPressResponse(prev=>prev||{quote:offlineResponse(tone),ok:false});
+    },7000);
+    fetchManagerResponse({...(ctx||{}),question},tone)
+      .then(r=>{clearTimeout(tid);settled=true;setPressResponse({quote:r.quote,ok:r.ok});if(import.meta.env.DEV)console.log("[pre-match] response:",r.ok?"AI":"OFFLINE",r.detail||"");})
+      .catch(e=>{clearTimeout(tid);settled=true;setPressResponse(prev=>prev||{quote:offlineResponse(tone),ok:false});if(import.meta.env.DEV)console.warn("[pre-match] response error:",e);})
+      .finally(()=>setAiLoading(s=>({...s,r:false})));
+  }
+
+  function pickTeamTalk(talkId){
+    setTeamTalk(talkId);
+    setTeamTalkSpeech(null);
+    setAiLoading(s=>({...s,s:true}));
+    const ctx=preMatchCtxRef.current||buildPreMatchCtx();
+    let settled=false;
+    const tid=setTimeout(()=>{
+      if(settled)return;
+      setTeamTalkSpeech(prev=>prev||{speech:offlineTalk(talkId),ok:false});
+    },7000);
+    fetchTeamTalkSpeech(ctx||{},talkId)
+      .then(r=>{clearTimeout(tid);settled=true;setTeamTalkSpeech({speech:r.speech,ok:r.ok});if(import.meta.env.DEV)console.log("[pre-match] speech:",r.ok?"AI":"OFFLINE",r.detail||"");})
+      .catch(e=>{clearTimeout(tid);settled=true;setTeamTalkSpeech(prev=>prev||{speech:offlineTalk(talkId),ok:false});if(import.meta.env.DEV)console.warn("[pre-match] speech error:",e);})
+      .finally(()=>setAiLoading(s=>({...s,s:false})));
+  }
 
   async function saveCareer(entry){
     const updated=[...careerHistory,entry];
@@ -783,9 +924,9 @@ export default function RM(){
     (async()=>{try{const r=await window.storage.get("auto-save");if(r&&r.value){const s=JSON.parse(r.value);setActiveSave({team:s.teams[s.pIdx].nm,colors:s.teams[s.pIdx].c||["#ccc","#fff"],wk:s.wk,league:s.league,pos:(()=>{const sorted=[...s.teams].sort((a,b)=>b.pts-a.pts||(b.gf-b.ga)-(a.gf-a.ga));return sorted.indexOf(s.teams[s.pIdx])+1;})(),pts:s.teams[s.pIdx].pts});}}catch(e){}})();
   },[]);
 
-  async function autoSave(t,f,w,n,p,l,th,tr,st,tt,mwc){
+  async function autoSave(t,f,w,n,p,l,th,tr,st,tt,mwc,pTone,mgc){
     if(!window.storage)return;
-    try{await window.storage.set("auto-save",JSON.stringify({teams:t,fix:f,wk:w,news:n,pIdx:p,league:l,trainHist:th,training:tr,streak:st,teamTalk:tt,mustWinCount:mwc}));}catch(e){}
+    try{await window.storage.set("auto-save",JSON.stringify({teams:t,fix:f,wk:w,news:n,pIdx:p,league:l,trainHist:th,training:tr,streak:st,teamTalk:tt,mustWinCount:mwc,pressTone:pTone,mindGamesCount:mgc}));}catch(e){}
   }
   async function clearSave(){
     if(window.storage)try{await window.storage.delete("auto-save");}catch(e){}
@@ -798,7 +939,9 @@ export default function RM(){
       currentNameLocale=LEAGUE_LOCALE[s.league]||"en";
       setLeague(s.league);setTeams(s.teams);setFix(s.fix);setWk(s.wk);setNews(s.news||[]);setPIdx(s.pIdx);
       setTrainHist(s.trainHist||[]);setTraining(s.training||"Fitness");setStreak(s.streak||0);
-      setTeamTalk(s.teamTalk||null);setMustWinCount(s.mustWinCount||0);
+      setTeamTalk(s.teamTalk==="tryhard"?"win":(s.teamTalk||null));setMustWinCount(s.mustWinCount||0);
+      setPressTone(s.pressTone||null);setMindGamesCount(s.mindGamesCount||0);
+      setPressQuestion(null);setPressResponse(null);setTeamTalkSpeech(null);setAsstBrief(null);
       setTList(mkTL());setTab("squad");setScr("game");setPressPending(null);pressCtxRef.current=null;
     }}catch(e){console.error(e);}})();
   }
@@ -831,6 +974,7 @@ export default function RM(){
     const world=applyPlayerChoice(preWorld,idx);
     setTeams(world.teams);setPIdx(idx);setFix(world.fix);setWk(world.startWk);
     setTab("squad");setStreak(0);setSel(null);setLast(null);setTraining("Fitness");setTrainHist([]);setMustWinCount(0);setTeamTalk(null);setPressPending(null);pressCtxRef.current=null;
+    setMindGamesCount(0);setPressTone(null);setPressQuestion(null);setPressResponse(null);setTeamTalkSpeech(null);setAsstBrief(null);
     const pt=world.teams[idx];
     const s=[...world.teams].sort((a,b)=>b.pts-a.pts||(b.gf-b.ga)-(a.gf-a.ga));
     const pos=s.indexOf(pt)+1;
@@ -844,7 +988,7 @@ export default function RM(){
     if(scout)n.push({w:19,...scout});
     setNews(n);setTList(mkTL());setPreWorld(null);setActiveSave(null);setScr("game");
     // Initial auto-save
-    autoSave(world.teams,world.fix,world.startWk,n,idx,league,[],"Fitness",0,null,0);
+    autoSave(world.teams,world.fix,world.startWk,n,idx,league,[],"Fitness",0,null,0,null,0);
   }
 
   function applyTraining(nt,pI,choice){
@@ -919,6 +1063,29 @@ export default function RM(){
     // Apply training before match
     applyTraining(nt,pIdx,training);
     const newTrainHist=[...trainHist,training];
+
+    // ── Pre-match press tone effects (subtle) ───────────────────
+    const oppIdxLive=pm.h===pIdx?pm.a:pm.h;
+    if(pressTone==="respectful"){
+      // opponent fancies it — bump their mentality one step toward attacking
+      const oTac=nt[oppIdxLive].tac;const ti=TACS.indexOf(oTac);
+      if(ti>=0&&ti<TACS.length-1)nt[oppIdxLive].tac=TACS[ti+1];
+    } else if(pressTone==="mindgames"){
+      const stale=mindGamesCount>=2; // 3rd in a row = no effect
+      if(stale){
+        setNews(n=>[...n,{w:wk,fr:"Asst. Manager",su:"Press are bored",bo:"Boss, the mind-games aren't landing any more. Reporters are barely writing it up. Worth changing tack."}]);
+      } else if(Math.random()<0.5){
+        // opponent's top XI player wobbles
+        const oppXIPlayers=nt[oppIdxLive].xi.map(id=>nt[oppIdxLive].sq.find(p=>p.id===id)).filter(Boolean);
+        if(oppXIPlayers.length){
+          const top=oppXIPlayers.reduce((a,b)=>a.ovr>=b.ovr?a:b);
+          top.frm=cl(top.frm-R(2,4),20,99);
+        }
+      } else {
+        // our XI gets over-hyped — small fitness drain
+        nt[pIdx].xi.forEach(id=>{const p=nt[pIdx].sq.find(x=>x.id===id);if(p)p.fit=cl(p.fit-R(1,3),20,100);});
+      }
+    }
     setTrainHist(newTrainHist);
 
     const home=nt[pm.h],away=nt[pm.a];
@@ -969,8 +1136,12 @@ export default function RM(){
       else{morW=R(5,10);morL=R(4,8);frmW=R(2,6);} // huge swing
     }
     else if(talk==="noloss"){morW=R(2,5);morL=R(0,2);} // loss barely hurts
-    else if(talk==="tryhard"){morW=R(3,6);morL=R(1,3);nt[pIdx].sq.forEach(p=>{p.fit=cl(p.fit-R(1,3),20,100);});} // extra fitness cost
     else if(talk==="noexpect"){morW=R(1,3);morL=R(0,1);} // minimal swing either way
+
+    // ── Pre-match press tone (subtle layer on top of team talk) ──
+    const tone=pressTone;
+    if(tone==="defiant"){morW=morW+1;morL=morL+1;}
+    else if(tone==="playdown"){morW=Math.max(1,morW-1);morL=Math.max(0,morL-1);}
 
     if(pWon){nt[pIdx].sq.forEach(p=>{p.mor=cl(p.mor+morW,30,99);p.frm=cl(p.frm+frmW,20,99);});}
     if(pLost){nt[pIdx].sq.forEach(p=>{p.mor=cl(p.mor-morL,25,99);});}
@@ -1076,7 +1247,7 @@ export default function RM(){
     if(nextWk>=38){setPressPending(null);pressCtxRef.current=null;clearSave();endSeason();return;}
     if(pcData&&mediaToken){
       pressCtxRef.current={
-        nt,fix,wk:nextWk,pIdx,league,th:trainHist,training,streak:newStreak,teamTalk,mwc:mustWinCount,
+        nt,fix,wk:nextWk,pIdx,league,th:trainHist,training,streak:newStreak,teamTalk,mwc:mustWinCount,pTone:null,mgc:mindGamesCount,
       };
       setPressPending({
         headline:`${home.nm} ${hg} - ${ag} ${away.nm}`,
@@ -1088,7 +1259,8 @@ export default function RM(){
       setPressPending(null);
       pressCtxRef.current=null;
     }
-    autoSave(nt,fix,nextWk,finalNews,pIdx,league,trainHist,training,newStreak,teamTalk,mustWinCount);
+    autoSave(nt,fix,nextWk,finalNews,pIdx,league,trainHist,training,newStreak,teamTalk,mustWinCount,null,mindGamesCount);
+    setPressTone(null);setPressQuestion(null);setPressResponse(null);setTeamTalkSpeech(null);setAsstBrief(null);
     if(board.msgs.length>0)setTab("news");
   }
 
@@ -1418,14 +1590,25 @@ export default function RM(){
     if(mustWinCount>=3){
       asstAdvice+=` Also boss — the lads are getting tired of the pressure speeches. Might want to ease off the 'must win' talk.`;
     }
+    if(mindGamesCount>=2){
+      asstAdvice+=` And the press are starting to roll their eyes at the mind-games. Lay off them for a game or two.`;
+    }
 
     const TALKS=[
       {id:"win",label:"I expect a win",desc:"Standard. Moderate morale boost for a win, moderate drop for a loss."},
       {id:"noloss",label:"Don't lose this",desc:"Cautious. Draw doesn't hurt morale. Loss is a small drop. Win gives a decent boost."},
       {id:"mustwin",label:"This is a must-win",desc:"Maximum pressure. Huge boost if you win. Morale crashes if you lose."+(mustWinCount>=3?" ⚠ Players may not respond.":"")},
-      {id:"tryhard",label:"Give it everything",desc:"Motivational. Slight fitness drain but players fight harder. Good morale effect either way."},
       {id:"noexpect",label:"No expectations",desc:"Pressure off. Loss barely hurts morale. Win gives a small lift. Best for tough fixtures."},
     ];
+
+    const TONES=[
+      {id:"defiant",label:"Defiant",desc:"Stick our neck out. Slight extra morale on a win, slight extra dent on a loss."},
+      {id:"respectful",label:"Respectful",desc:"Big up the opposition. They'll come out fancying it — opens the game up."},
+      {id:"mindgames",label:"Mind-games",desc:"Plant a seed of doubt. Coin flip: their key man wobbles, OR our lads get over-hyped."+(mindGamesCount>=2?" ⚠ Press tired of it.":"")},
+      {id:"playdown",label:"Play it down",desc:"Take the pressure off. Smaller swings either way."},
+    ];
+
+    const kickOffReady=pressTone&&teamTalk;
 
     return (
     <div style={{background:"#0e1220",minHeight:"100vh",fontFamily:"'Tahoma',sans-serif",fontSize:11,display:"flex",flexDirection:"column"}}>
@@ -1452,7 +1635,12 @@ export default function RM(){
         <button className="cm-btn" onClick={()=>{setTalkScreen(false);setShowIntel(false);setIntelSel(null);}}>← Back</button>
         <div style={{display:"flex",gap:4}}>
           <button className={`cm-btn${showIntel?" act":""}`} onClick={()=>{setShowIntel(!showIntel);setIntelSel(null);}} style={{padding:"4px 10px"}}>🔍 Intel</button>
-          <button className="cm-btn green" onClick={()=>{if(!teamTalk)setTeamTalk("win");if(teamTalk==="mustwin")setMustWinCount(c=>c+1);else setMustWinCount(0);setTalkScreen(false);setShowIntel(false);setIntelSel(null);startLive();}} style={{fontWeight:"bold",padding:"4px 16px"}}>Kick Off ▶</button>
+          <button className="cm-btn green" disabled={!kickOffReady} onClick={()=>{
+            if(!kickOffReady)return;
+            if(teamTalk==="mustwin")setMustWinCount(c=>c+1);else setMustWinCount(0);
+            if(pressTone==="mindgames")setMindGamesCount(c=>c+1);else setMindGamesCount(0);
+            setTalkScreen(false);setShowIntel(false);setIntelSel(null);startLive();
+          }} style={{fontWeight:"bold",padding:"4px 16px",opacity:kickOffReady?1:0.4,cursor:kickOffReady?"pointer":"not-allowed"}}>Kick Off ▶</button>
         </div>
       </div>
       {showIntel&&opp?<div className="cm-panel" style={{margin:2,flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
@@ -1539,22 +1727,85 @@ export default function RM(){
         </div>
       </div>:<>
       {/* Assistant advice */}
-      <div style={{background:"#141830",borderBottom:"1px solid #2a3050",padding:"8px 10px"}}>
-        <div style={{fontSize:10,color:"#6090e0",fontWeight:"bold",marginBottom:4}}>Asst. Manager:</div>
-        <div style={{fontSize:10,color:"#8090b0",lineHeight:1.5}}>{asstAdvice}</div>
-        <div style={{fontSize:10,color:"#8090b0",marginTop:4,fontStyle:"italic"}}>{asstSuggestion}</div>
+      {(()=>{
+        const liveAI=!!(asstBrief&&asstBrief.ok);
+        const offlineBriefShown=!!(asstBrief&&!asstBrief.ok);
+        const waiting=!asstBrief&&aiLoading.b;
+        const stalled=!asstBrief&&!aiLoading.b;
+        let pillBg="#3a2020",pillFg="#c08080",pillTxt="OFFLINE";
+        if(liveAI){pillBg="#1a4020";pillFg="#40ff80";pillTxt="AI";}
+        else if(waiting){pillBg="#1a2540";pillFg="#8090c0";pillTxt="WAIT";}
+        else if(stalled){pillBg="#3a3020";pillFg="#d0a080";pillTxt="OFFLINE";}
+        return (
+      <div style={{background:liveAI?"#10241a":"#141830",borderBottom:`1px solid ${liveAI?"#2a6a3a":"#2a3050"}`,padding:"8px 10px",transition:"background 0.3s ease"}}>
+        <div style={{fontSize:10,color:liveAI?"#80ffaa":"#6090e0",fontWeight:"bold",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          <span style={{flex:"1 1 auto",minWidth:0}}>Asst. Manager</span>
+          <span style={{padding:"2px 8px",border:`1px solid ${liveAI?"#40a060":"#604040"}`,flexShrink:0,background:pillBg,color:pillFg,fontWeight:"bold",fontSize:9,letterSpacing:0.5}}>
+            {pillTxt}
+          </span>
+        </div>
+        <div style={{fontSize:11,color:liveAI?"#d0e8d8":"#8090b0",lineHeight:1.5,whiteSpace:"pre-wrap"}}>
+          {waiting&&<span style={{color:"#506080",fontStyle:"italic"}}>Talking to the assistant manager…</span>}
+          {!waiting&&asstBrief&&asstBrief.text}
+          {!waiting&&!asstBrief&&stalled&&<>
+            <span>{asstAdvice}</span>
+            <div style={{fontSize:10,color:"#8090b0",marginTop:4,fontStyle:"italic"}}>{asstSuggestion}</div>
+          </>}
+        </div>
+        {offlineBriefShown&&<div style={{fontSize:10,color:"#8090b0",marginTop:4,fontStyle:"italic"}}>{asstSuggestion}</div>}
       </div>
-      {/* Team talk options */}
-      <div className="cm-panel" style={{margin:2,flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        <div style={{padding:"6px 8px",fontWeight:"bold",color:"#6090e0",fontSize:11}}>Address the squad:</div>
-        <div className="cm-sunken" style={{margin:"0 4px",flex:1,overflowY:"auto"}}>
-          {TALKS.map(t=> <div key={t.id} onClick={()=>setTeamTalk(t.id)} style={{padding:"8px 10px",cursor:"pointer",borderBottom:"1px solid #1e2540",
-            background:teamTalk===t.id?"#2040b0":"",border:teamTalk===t.id?"1px solid #4060c0":"1px solid transparent"}}
-            onMouseEnter={e=>{if(teamTalk!==t.id)e.currentTarget.style.background="#1a2540";}}
-            onMouseLeave={e=>{if(teamTalk!==t.id)e.currentTarget.style.background="";}}>
-            <div style={{fontWeight:"bold",color:teamTalk===t.id?"#ffd700":"#c0c8e0",fontSize:12}}>"{t.label}"</div>
-            <div style={{fontSize:9,color:teamTalk===t.id?"#8090c0":"#506080",marginTop:2}}>{t.desc}</div>
-          </div>)}
+        );
+      })()}
+      {/* Press + Team Talk */}
+      <div style={{flex:1,overflowY:"auto",padding:"2px 0"}}>
+        {/* Press conference */}
+        <div className="cm-panel" style={{margin:2}}>
+          <div style={{padding:"6px 8px",fontWeight:"bold",color:"#6090e0",fontSize:11,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span>Press Room</span>
+            <span style={{fontSize:9,color:"#506080",fontWeight:"normal",display:"flex",gap:6,alignItems:"center"}}>
+              {pressQuestion?.reporter&&<span>{pressQuestion.reporter}</span>}
+              {pressQuestion&&<span style={{padding:"1px 5px",borderRadius:2,background:pressQuestion.ok?"#1a4020":"#3a2020",color:pressQuestion.ok?"#40ff80":"#c08080",fontWeight:"bold",fontSize:8,letterSpacing:0.5}}>{pressQuestion.ok?"AI":"OFFLINE"}</span>}
+            </span>
+          </div>
+          <div className="cm-sunken" style={{margin:"0 4px 4px"}}>
+            <div style={{padding:"8px 10px",borderBottom:"1px solid #1e2540",fontSize:11,color:"#c0c8e0",lineHeight:1.5,fontStyle:"italic",minHeight:32}}>
+              {aiLoading.q&&!pressQuestion?<span style={{color:"#506080"}}>The reporter clears their throat...</span>:pressQuestion?`"${pressQuestion.question}"`:<span style={{color:"#506080"}}>Waiting for the press...</span>}
+            </div>
+            <div style={{padding:"6px 8px",fontSize:9,color:"#506080",fontWeight:"bold",textTransform:"uppercase",letterSpacing:0.5}}>Your reply:</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:2,padding:"0 4px 4px"}}>
+              {TONES.map(t=> <div key={t.id} onClick={()=>{if(!aiLoading.q||pressQuestion)pickPressTone(t.id);}} style={{padding:"6px 8px",cursor:"pointer",
+                background:pressTone===t.id?"#2040b0":"#0a1020",border:pressTone===t.id?"1px solid #4060c0":"1px solid #1e2540"}}
+                onMouseEnter={e=>{if(pressTone!==t.id)e.currentTarget.style.background="#1a2540";}}
+                onMouseLeave={e=>{if(pressTone!==t.id)e.currentTarget.style.background="#0a1020";}}>
+                <div style={{fontWeight:"bold",color:pressTone===t.id?"#ffd700":"#c0c8e0",fontSize:11}}>{t.label}</div>
+                <div style={{fontSize:9,color:pressTone===t.id?"#8090c0":"#506080",marginTop:2,lineHeight:1.3}}>{t.desc}</div>
+              </div>)}
+            </div>
+            {pressTone&&<div style={{padding:"8px 10px",borderTop:"1px solid #1e2540",fontSize:11,color:"#ffd700",lineHeight:1.5,minHeight:32,fontStyle:"italic",display:"flex",gap:6,alignItems:"flex-start"}}>
+              <span style={{flex:1}}>{aiLoading.r&&!pressResponse?<span style={{color:"#506080"}}>...thinking...</span>:pressResponse?`"${pressResponse.quote}"`:<span style={{color:"#506080"}}>...</span>}</span>
+              {pressResponse&&<span style={{padding:"1px 5px",borderRadius:2,background:pressResponse.ok?"#1a4020":"#3a2020",color:pressResponse.ok?"#40ff80":"#c08080",fontWeight:"bold",fontSize:8,letterSpacing:0.5,fontStyle:"normal",flexShrink:0}}>{pressResponse.ok?"AI":"OFFLINE"}</span>}
+            </div>}
+          </div>
+        </div>
+        {/* Team talk */}
+        <div className="cm-panel" style={{margin:2}}>
+          <div style={{padding:"6px 8px",fontWeight:"bold",color:"#6090e0",fontSize:11}}>Dressing Room — address the squad:</div>
+          <div className="cm-sunken" style={{margin:"0 4px 4px"}}>
+            <div style={{padding:"6px 8px",fontSize:9,color:"#506080",fontWeight:"bold",textTransform:"uppercase",letterSpacing:0.5}}>Your talk:</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:2,padding:"0 4px 4px"}}>
+              {TALKS.map(t=> <div key={t.id} onClick={()=>pickTeamTalk(t.id)} style={{padding:"6px 8px",cursor:"pointer",
+              background:teamTalk===t.id?"#2040b0":"#0a1020",border:teamTalk===t.id?"1px solid #4060c0":"1px solid #1e2540"}}
+              onMouseEnter={e=>{if(teamTalk!==t.id)e.currentTarget.style.background="#1a2540";}}
+              onMouseLeave={e=>{if(teamTalk!==t.id)e.currentTarget.style.background="#0a1020";}}>
+              <div style={{fontWeight:"bold",color:teamTalk===t.id?"#ffd700":"#c0c8e0",fontSize:11}}>{t.label}</div>
+              <div style={{fontSize:9,color:teamTalk===t.id?"#8090c0":"#506080",marginTop:2,lineHeight:1.3}}>{t.desc}</div>
+            </div>)}
+            </div>
+            {teamTalk&&<div style={{padding:"8px 10px",borderTop:"1px solid #1e2540",fontSize:11,color:"#ffd700",lineHeight:1.5,minHeight:32,fontStyle:"italic",display:"flex",gap:6,alignItems:"flex-start"}}>
+              <span style={{flex:1}}>{aiLoading.s&&!teamTalkSpeech?<span style={{color:"#506080"}}>...thinking...</span>:teamTalkSpeech?`"${teamTalkSpeech.speech}"`:<span style={{color:"#506080"}}>...</span>}</span>
+              {teamTalkSpeech&&<span style={{padding:"1px 5px",borderRadius:2,background:teamTalkSpeech.ok?"#1a4020":"#3a2020",color:teamTalkSpeech.ok?"#40ff80":"#c08080",fontWeight:"bold",fontSize:8,letterSpacing:0.5,fontStyle:"normal",flexShrink:0}}>{teamTalkSpeech.ok?"AI":"OFFLINE"}</span>}
+            </div>}
+          </div>
         </div>
       </div></>}
     </div>
@@ -1583,7 +1834,7 @@ export default function RM(){
           <span style={{fontWeight:"bold",color:pPos>=18?"#ff4040":"#40c040",fontSize:13}}>{pt.pts} pts</span>
           {windowOpen&&<><span style={{color:"#d0a030"}}>£{(pt.bud/1e6).toFixed(1)}M</span><span style={{color:24-wk<=2?"#ff4040":"#d0a030",fontSize:10}}>Window: {24-wk}wk</span></>}
         </div>
-        <button className="cm-btn green" onClick={()=>{setTeamTalk(null);setTalkScreen(true);}} style={{fontWeight:"bold"}}>▶ Continue</button>
+        <button className="cm-btn green" onClick={()=>{setTeamTalk(null);setAsstBrief(null);setAiLoading(s=>({...s,b:true}));setTalkScreen(true);}} style={{fontWeight:"bold"}}>▶ Continue</button>
       </div>
       <div style={{display:"flex",gap:1,margin:"2px 2px 0",flexWrap:"wrap"}}>{TABS.map(([k,l])=> <button key={k} className={`cm-btn${tab===k?" act":""}`} onClick={()=>{setTab(k);setSel(null);setSelT(null);setSlotSel(null);}} style={{flex:"1 1 auto"}}>{l}</button>)}</div>
 

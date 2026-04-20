@@ -86,15 +86,8 @@ function extractChatCompletionText(data) {
     if (joined.trim()) return { text: joined.trim(), finishReason };
   }
 
-  const r = msg.reasoning_content;
-  if (typeof r === "string" && r.trim()) {
-    const t = r.trim();
-    const sentences = t.split(/(?<=[.!?])\s+/).filter(Boolean);
-    const tail = sentences.length >= 2 ? sentences.slice(-2).join(" ") : t;
-    const clipped = tail.length > 400 ? tail.slice(-400).trim() : tail;
-    return { text: clipped, finishReason };
-  }
-
+  // Never use reasoning_content as a fallback — for reasoning models it's the model's internal
+  // scratch pad ("Let's count...", "Example: ...") and leaks into the UI looking like a bug.
   return { text: "", finishReason };
 }
 

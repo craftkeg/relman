@@ -139,11 +139,8 @@ function extractText(data) {
       .join("");
     if (joined.trim()) return joined.trim();
   }
-  if (typeof msg.reasoning_content === "string" && msg.reasoning_content.trim()) {
-    const sentences = msg.reasoning_content.trim().split(/(?<=[.!?])\s+/).filter(Boolean);
-    const tail = sentences.length >= 2 ? sentences.slice(-2).join(" ") : msg.reasoning_content.trim();
-    return tail.length > 400 ? tail.slice(-400).trim() : tail;
-  }
+  // Never use reasoning_content as a fallback — for reasoning models it's the model's internal
+  // scratch pad ("Let's count...", "Example: ...") and leaks into the UI looking like a bug.
   return "";
 }
 

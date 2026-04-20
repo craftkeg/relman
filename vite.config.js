@@ -24,9 +24,29 @@ function azureFoundryProxy(env) {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const proxy = azureFoundryProxy(env);
+  /** Opens /relman/ when dev starts. Set VITE_DEV_OPEN_BROWSER=false in .env.local to disable. */
+  const autoOpenBrowser = env.VITE_DEV_OPEN_BROWSER !== "false";
   return {
     plugins: [react()],
     base: "/relman/",
-    ...(proxy ? { server: { proxy }, preview: { proxy } } : {}),
+    server: {
+      port: 5173,
+      strictPort: false,
+      open: autoOpenBrowser ? "/relman/" : false,
+      /** Avoid the browser caching old JS/CSS while you iterate. */
+      headers: {
+        "Cache-Control": "no-store, max-age=0",
+      },
+      ...(proxy ? { proxy } : {}),
+    },
+    preview: {
+      port: 4173,
+      strictPort: false,
+      open: autoOpenBrowser ? "/relman/" : false,
+      headers: {
+        "Cache-Control": "no-store, max-age=0",
+      },
+      ...(proxy ? { proxy } : {}),
+    },
   };
 });
